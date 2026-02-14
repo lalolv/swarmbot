@@ -56,9 +56,14 @@ class TaskManager:
             logger.warning("任务已存在: {}", task_id)
             return False
 
+        if not config.task_id or config.task_id != task_id:
+            config.task_id = task_id
+
         config_key = Channels.task_config(task_id)
         await self.redis.set(config_key, config.to_json(), ex=86400)
         await self.redis.sadd(Channels.all_tasks(), task_id)
+        if config.user_id:
+            await self.redis.sadd(Channels.user_tasks(config.user_id), task_id)
 
         task = RobotTask(
             task_id=task_id,
@@ -81,6 +86,45 @@ class TaskManager:
         task.cancel()
         logger.info("任务取消请求已发送: {}", task_id)
         return True
+
+    async def delete_task(self, task_id: str) -> bool:
+        """删除任务（停止运行并清理 Redis 记录）。"""
+        task = self._tasks.get(task_id)
+        if task:
+            task.cancel()
+            if task._task:
+                await asyncio.gather(task._task, return_exceptions=True)
+
+        config_key = Channels.task_config(task_id)
+        status_key = Channels.task_status(task_id)
+        config_raw = await self.redis.get(config_key)
+        status_raw = await self.redis.get(status_key)
+
+        user_id = ""
+        if status_raw:
+            try:
+                user_id = TaskStatus.from_json(status_raw).user_id
+            except Exception:
+                user_id = ""
+        if not user_id and config_raw:
+            try:
+                user_id = TaskConfig.from_json(config_raw).user_id
+            except Exception:
+                user_id = ""
+
+        stream_keys = [Channels.task_stream(task_id, stream) for stream in Channels.ALL_STREAMS]
+        removed_key_count = await self.redis.delete(config_key, status_key, *stream_keys)
+        removed_task_count = await self.redis.srem(Channels.all_tasks(), task_id)
+        if user_id:
+            await self.redis.srem(Channels.user_tasks(user_id), task_id)
+
+        logger.info(
+            "任务已删除: task={} keys_removed={} task_set_removed={}",
+            task_id,
+            removed_key_count,
+            removed_task_count,
+        )
+        return bool(task or removed_key_count or removed_task_count)
 
     async def get_task_status(self, task_id: str) -> Optional[TaskStatus]:
         """获取任务状态。"""
@@ -161,6 +205,7 @@ class TaskManager:
         支持的 action:
         - create: 创建新任务
         - cancel: 取消任务
+        - delete: 删除任务
         - update_config: 热更新任务配置
         - shutdown: 关闭 Worker
         """
@@ -179,6 +224,9 @@ class TaskManager:
 
             elif action == "cancel" and task_id:
                 await self.cancel_task(task_id)
+
+            elif action == "delete" and task_id:
+                await self.delete_task(task_id)
 
             elif action == "update_config" and task_id:
                 patch = data.get("patch", {})

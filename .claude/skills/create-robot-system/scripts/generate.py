@@ -12,6 +12,11 @@ PREFIX_RE = re.compile(r"^[a-zA-Z0-9:_-]+$")
 
 
 TEMPLATE_ORDER = [
+    "{target_dir}/api/main.py.tpl",
+    "{target_dir}/api/schemas/tasks.py.tpl",
+    "{target_dir}/api/schemas/__init__.py.tpl",
+    "{target_dir}/api/routes/tasks.py.tpl",
+    "{target_dir}/api/routes/live_stream.py.tpl",
     "{target_dir}/shared/channels.py.tpl",
     "{target_dir}/shared/redis_client.py.tpl",
     "{target_dir}/shared/task_models.py.tpl",
@@ -25,7 +30,6 @@ TEMPLATE_ORDER = [
     "{target_dir}/worker/robot_task.py.tpl",
     "{target_dir}/worker/task_manager.py.tpl",
     "{target_dir}/worker/main.py.tpl",
-    "{target_dir}/api/routes/live_stream.py.tpl",
 ]
 
 

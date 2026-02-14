@@ -1,5 +1,7 @@
 """SSE Bridge — 将 Redis Streams 桥接为 Server-Sent Events。"""
 
+from __future__ import annotations
+
 import json
 from typing import AsyncGenerator
 
@@ -184,8 +186,8 @@ def _signal_to_sse(fields: dict[str, str]) -> tuple[str | None, dict]:
 
 def _format_sse_event(event_type: str, payload: dict, event_id: str | None = None) -> str:
     """格式化 SSE 事件字符串。"""
-    prefix = f"id: {event_id}\n" if event_id else ""
-    return f"{prefix}event: {event_type}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+    event_id_prefix = f"id: {event_id}\n" if event_id else ""
+    return event_id_prefix + f"event: {event_type}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
 def _parse_stream_name(task_id: str, stream_key: str) -> str:

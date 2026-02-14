@@ -8,9 +8,9 @@ from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request
 
-from pm_sports_bots.api.schemas.tasks import CreateTaskRequest, RobotSpec, UpdateTaskRequest
-from pm_sports_bots.robots import TaskComposer
-from pm_sports_bots.shared import Channels, RedisClient, TaskConfig, TaskState, TaskStatus
+from {package_name}.api.schemas.tasks import CreateTaskRequest, RobotSpec, UpdateTaskRequest
+from {package_name}.robots import TaskComposer
+from {package_name}.shared import Channels, RedisClient, TaskConfig, TaskState, TaskStatus
 
 router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
 

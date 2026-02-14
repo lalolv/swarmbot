@@ -9,7 +9,7 @@ description: Generate a Redis Streams based async robot task system scaffold for
 
 ## 何时使用
 
-- 用户要求搭建机器人任务系统（Producer/Consumer + Worker + SSE）。
+- 用户要求搭建机器人任务系统（Producer/Consumer + Worker + SSE + Task API）。
 - 用户需要 Redis Streams 信号总线、任务编排、崩溃恢复、幂等执行骨架。
 - 用户需要可扩展的多机器人 runtime，并提供前端实时事件订阅。
 
@@ -39,7 +39,7 @@ description: Generate a Redis Streams based async robot task system scaffold for
 
 1. 使用模板渲染脚本生成骨架：
    - `python3 .claude/skills/create-robot-system/scripts/generate.py --package-name <package_name> --prefix <prefix> --target-dir <target_dir> --streams <streams> --producer-name <producer_name> --consumer-name <consumer_name>`
-2. 按依赖顺序输出 14 个核心文件（shared -> robots -> worker -> api/routes）。
+2. 按依赖顺序输出 18 个核心文件（api -> shared -> robots -> worker）。
 3. 自动替换占位符：
    - `{package_name}` `{prefix}` `{target_dir}` `{producer_name}` `{consumer_name}`
    - `snake_case -> PascalCase`：`{ProducerClassName}` `{ConsumerClassName}`
@@ -52,6 +52,8 @@ description: Generate a Redis Streams based async robot task system scaffold for
 - 所有新生成代码必须可 `ast.parse`。
 - 不允许残留未替换占位符：`{package_name}`、`{ProducerClassName}` 等。
 - 若发现 `{{` / `}}` 转义残留，必须修复为真实代码语法。
+- 生成结果应包含完整任务 API：`/api/v1/tasks` 的 create/list/get/update/delete 与 `/api/v1/tasks/robots`。
+- 任务请求模型应位于 `api/schemas/tasks.py`，路由中仅做导入和编排逻辑。
 
 ## 实现说明
 

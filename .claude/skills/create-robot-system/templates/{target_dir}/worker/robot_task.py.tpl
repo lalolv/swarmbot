@@ -154,11 +154,14 @@ class RobotTask:
         key = Channels.task_status(self.task_id)
         data = await self.redis.get(key)
         if not data:
-            return TaskStatus.create(self.task_id)
+            return TaskStatus.create(self.task_id, user_id=self.config.user_id)
         try:
-            return TaskStatus.from_json(data)
+            status = TaskStatus.from_json(data)
+            if not status.user_id and self.config.user_id:
+                status.user_id = self.config.user_id
+            return status
         except Exception:
-            return TaskStatus.create(self.task_id)
+            return TaskStatus.create(self.task_id, user_id=self.config.user_id)
 
     async def _publish_status(self, status: TaskStatus) -> None:
         """发布任务状态到控制 stream。"""

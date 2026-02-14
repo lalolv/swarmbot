@@ -28,6 +28,22 @@ PLACEHOLDER_PATTERNS = [
     r"\{ALL_STREAMS_ITEMS\}",
 ]
 
+REQUIRED_FILES = [
+    "api/main.py",
+    "api/routes/live_stream.py",
+    "api/routes/tasks.py",
+    "api/schemas/tasks.py",
+    "api/schemas/__init__.py",
+    "shared/channels.py",
+    "shared/redis_client.py",
+    "shared/task_models.py",
+    "robots/base.py",
+    "robots/composer.py",
+    "worker/robot_task.py",
+    "worker/task_manager.py",
+    "worker/main.py",
+]
+
 
 def iter_python_files(root: Path) -> list[Path]:
     return sorted(p for p in root.rglob("*.py") if p.is_file())
@@ -57,6 +73,14 @@ def validate_placeholders(py_file: Path) -> list[str]:
     return errors
 
 
+def validate_required_files(root: Path) -> list[str]:
+    errors: list[str] = []
+    for rel_path in REQUIRED_FILES:
+        if not (root / rel_path).exists():
+            errors.append(f"缺少核心文件: {root / rel_path}")
+    return errors
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="校验生成的 robot system 代码")
     parser.add_argument("--root", required=True, help="生成代码根目录")
@@ -73,6 +97,8 @@ def main() -> int:
         return 1
 
     all_errors: list[str] = []
+    all_errors.extend(validate_required_files(root))
+
     for py_file in py_files:
         all_errors.extend(validate_python_syntax(py_file))
         all_errors.extend(validate_placeholders(py_file))
