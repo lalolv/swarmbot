@@ -47,12 +47,38 @@ class SampleConsumer(BaseRobot):
 
     async def _handle_data_update(self, signal: Signal) -> None:
         """处理数据更新信号。"""
-        # 🔧 自定义点: 替换为实际的处理逻辑
         input_data = signal.data
+        raw_value = input_data.get("value")
+        if raw_value is None:
+            logger.debug("SampleConsumer 收到无 value 的信号: task={}", self.task_id)
+            return
+
+        try:
+            value = float(raw_value)
+        except (TypeError, ValueError):
+            logger.warning(
+                "SampleConsumer 信号 value 非数字: task={} value={}",
+                self.task_id,
+                raw_value,
+            )
+            return
+
+        coefficient = float(self.config.get("multiplier", 1.5))
+        offset = float(self.config.get("offset", 0.0))
+        transformed = round(value * coefficient + offset, 4)
+
         result = {
             "source_type": signal.type,
-            "processed": True,
-            "input_summary": str(input_data)[:100],
+            "input_value": value,
+            "coefficient": coefficient,
+            "offset": offset,
+            "result_value": transformed,
+            "timestamp": signal.timestamp,
         }
         await self.emit("output", "process_result", result)
-        logger.debug("SampleConsumer 已处理信号并发出结果: task={}", self.task_id)
+        logger.debug(
+            "SampleConsumer 已处理随机数: task={} input={} result={}",
+            self.task_id,
+            value,
+            transformed,
+        )

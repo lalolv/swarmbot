@@ -107,6 +107,10 @@ async def list_tasks(request: Request) -> dict[str, Any]:
     task_ids = sorted(await redis.smembers(Channels.all_tasks()))
     tasks: list[dict[str, Any]] = []
     for task_id in task_ids:
+        exists = await redis.exists(Channels.task_config(task_id)) or await redis.exists(Channels.task_status(task_id))
+        if not exists:
+            await redis.srem(Channels.all_tasks(), task_id)
+            continue
         tasks.append(await _load_task_detail(redis, task_id))
     return {
         "items": tasks,

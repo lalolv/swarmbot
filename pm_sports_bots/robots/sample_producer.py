@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import random
 from datetime import datetime
 from typing import Any
 
@@ -43,10 +44,19 @@ class SampleProducer(BaseRobot):
 
     async def on_tick(self) -> None:
         """定时产生数据。"""
-        # 🔧 自定义点: 替换为实际的数据获取逻辑
+        min_value = float(self.config.get("min_value", 0.0))
+        max_value = float(self.config.get("max_value", 100.0))
+        random_value = random.uniform(min_value, max_value)
+
         data = {
-            "message": "示例数据",
+            "value": round(random_value, 4),
+            "min_value": min_value,
+            "max_value": max_value,
             "timestamp": datetime.utcnow().isoformat() + "Z",
         }
         await self.emit("data", "data_update", data)
-        logger.debug("SampleProducer 已发送数据信号: task={}", self.task_id)
+        logger.debug(
+            "SampleProducer 已发送随机数信号: task={} value={}",
+            self.task_id,
+            data["value"],
+        )

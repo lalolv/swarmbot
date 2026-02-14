@@ -165,6 +165,17 @@ def _signal_to_sse(fields: dict[str, str]) -> tuple[str | None, dict]:
     except Exception:
         payload = {}
 
+    source = str(fields.get("source", "") or "")
+    timestamp = str(fields.get("timestamp", "") or "")
+
+    if signal_type in {"data_update", "process_result"}:
+        payload = {
+            "robot_type": source,
+            "signal_type": signal_type,
+            "timestamp": timestamp,
+            "data": payload,
+        }
+
     # robot_start/stop/error 统一为 robot_status 事件
     if signal_type in {"robot_start", "robot_stop", "robot_error"}:
         robot_type = str(payload.get("robot_type", "") or "")

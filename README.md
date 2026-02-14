@@ -73,6 +73,16 @@ Open:
 
 `http://127.0.0.1:8000/api/v1/live/subscribe/demo-task-1?history=1`
 
+### 8) Frontend observability console (Vue3 + Tailwind)
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open `http://127.0.0.1:5173`.
+
 ### Environment
 
 - `REDIS_URL` default: `redis://localhost:6379/0`
