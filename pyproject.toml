@@ -1,0 +1,12 @@
+[project]
+name = "pm-sports-bots"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.129.0",
+    "loguru>=0.7.3",
+    "redis>=7.1.1",
+    "uvicorn>=0.40.0",
+]

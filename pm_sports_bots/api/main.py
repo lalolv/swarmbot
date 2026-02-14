@@ -1,0 +1,25 @@
+"""FastAPI app entry for live stream bridge."""
+
+from __future__ import annotations
+
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+
+from pm_sports_bots.api.routes.live_stream import router as live_router
+from pm_sports_bots.shared import RedisClient
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    redis = RedisClient()
+    await redis.connect()
+    app.state.redis = redis
+    try:
+        yield
+    finally:
+        await redis.close()
+
+
+app = FastAPI(title="PM Sports Bots API", lifespan=lifespan)
+app.include_router(live_router)
