@@ -1,114 +1,47 @@
 <script setup>
-import { onBeforeUnmount, onMounted, reactive, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted } from "vue";
 
-import CanvasTopology from "./components/CanvasTopology.vue";
+import Header from "./components/Header.vue";
+import InfiniteCanvas from "./components/InfiniteCanvas.vue";
 import { useObservabilityStore } from "./stores/observability";
 
 const store = useObservabilityStore();
 
-const form = reactive({
-  taskId: "",
-  userId: "",
-  pollInterval: 2,
-  selectedRobots: [],
-});
+// Computed
+const isSubscribed = computed(() => store.connectionState === "connected" || store.connectionState === "connecting");
 
-const loading = ref(false);
-const creating = ref(false);
-const syncing = ref(false);
-const stopping = ref(false);
-const cleaning = ref(false);
-const message = ref("");
-
-function toggleRobot(robotType) {
-  if (form.selectedRobots.includes(robotType)) {
-    form.selectedRobots = form.selectedRobots.filter((item) => item !== robotType);
-    return;
-  }
-  form.selectedRobots.push(robotType);
+// Methods
+async function handleCreateTask(form) {
+  await store.createNewTask(form);
 }
 
-async function initialize() {
-  loading.value = true;
-  message.value = "";
-  try {
-    await store.initialize();
-    if (store.monitorTaskId) {
-      await store.startMonitoring(store.monitorTaskId);
-    }
-  } catch (error) {
-    message.value = error.message;
-  } finally {
-    loading.value = false;
+async function handleSelectTask(taskId) {
+  store.monitorTaskId = taskId;
+  // Unsubscribe from current task if subscribed
+  if (isSubscribed.value) {
+    store.stopMonitoring();
   }
 }
 
-async function submitCreate() {
-  creating.value = true;
-  message.value = "";
-  try {
-    const result = await store.createNewTask(form);
-    message.value = `任务创建成功: ${result.task_id}`;
-    form.taskId = "";
-    form.userId = "";
-  } catch (error) {
-    message.value = error.message;
-  } finally {
-    creating.value = false;
-  }
+async function handleSubscribe(taskId) {
+  await store.startMonitoring(taskId);
 }
 
-async function monitorSelected() {
-  message.value = "";
-  try {
-    await store.startMonitoring(store.monitorTaskId);
-  } catch (error) {
-    message.value = error.message;
-  }
+function handleUnsubscribe() {
+  store.stopMonitoring();
 }
 
-async function syncTask() {
-  syncing.value = true;
-  message.value = "";
-  try {
-    await store.syncTaskRobots(store.monitorTaskId);
-    message.value = `同步完成: ${store.monitorTaskId}`;
-  } catch (error) {
-    message.value = error.message;
-  } finally {
-    syncing.value = false;
-  }
+async function handleDeleteTask(taskId) {
+  await store.cleanupTask(taskId);
 }
 
-async function stopTask() {
-  stopping.value = true;
-  message.value = "";
-  try {
-    const result = await store.stopTask(store.monitorTaskId);
-    message.value = result?.message || `任务已停止: ${store.monitorTaskId}`;
-  } catch (error) {
-    message.value = error.message;
-  } finally {
-    stopping.value = false;
-  }
+async function handleRefreshTasks() {
+  await store.refreshTasks();
 }
 
-async function cleanupTask() {
-  cleaning.value = true;
-  message.value = "";
-  try {
-    const taskId = store.monitorTaskId;
-    const result = await store.cleanupTask(taskId);
-    message.value = result?.message || `任务已清理: ${taskId}`;
-  } catch (error) {
-    message.value = error.message;
-  } finally {
-    cleaning.value = false;
-  }
-}
-
+// Lifecycle
 onMounted(() => {
-  initialize();
+  store.initialize();
 });
 
 onBeforeUnmount(() => {
@@ -117,157 +50,80 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-app px-4 py-6 text-ink md:px-8">
-    <div class="mx-auto max-w-[1400px] space-y-4">
-      <header class="rounded-3xl bg-white/85 p-5 shadow-panel backdrop-blur animate-floatIn">
-        <p class="font-body text-xs uppercase tracking-[0.25em] text-slate-500">PM Sports Bots</p>
-        <h1 class="mt-1 font-display text-3xl">Create Task + Infinite Canvas Monitor</h1>
-        <p class="mt-2 text-sm text-slate-600">仅保留两个核心功能：任务创建、无限画布监控。</p>
-      </header>
-
-      <section class="grid gap-4 xl:grid-cols-[420px_1fr]">
-        <aside class="rounded-3xl bg-white/85 p-5 shadow-panel backdrop-blur">
-          <h2 class="font-display text-xl">Create Task</h2>
-
-          <form class="mt-4 space-y-3" @submit.prevent="submitCreate">
-            <label class="block">
-              <span class="mb-1 block text-xs text-slate-500">task_id (optional)</span>
-              <input
-                v-model="form.taskId"
-                class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-sky"
-                placeholder="demo-task-1"
-              />
-            </label>
-
-            <label class="block">
-              <span class="mb-1 block text-xs text-slate-500">user_id (optional)</span>
-              <input
-                v-model="form.userId"
-                class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-sky"
-                placeholder="u1"
-              />
-            </label>
-
-            <label class="block">
-              <span class="mb-1 block text-xs text-slate-500">poll_interval</span>
-              <input
-                v-model.number="form.pollInterval"
-                type="number"
-                min="0.2"
-                step="0.1"
-                class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-sky"
-              />
-            </label>
-
-            <div>
-              <p class="mb-2 text-xs text-slate-500">robots</p>
-              <div class="flex flex-wrap gap-2">
-                <button
-                  v-for="robotType in store.robotTypes"
-                  :key="robotType"
-                  type="button"
-                  class="rounded-full border px-3 py-1 text-xs transition"
-                  :class="form.selectedRobots.includes(robotType)
-                    ? 'border-sky bg-sky/10 text-sky-700'
-                    : 'border-slate-300 bg-white text-slate-600 hover:border-slate-400'"
-                  @click="toggleRobot(robotType)"
-                >
-                  {{ robotType }}
-                </button>
-              </div>
-            </div>
-
-            <button
-              class="w-full rounded-xl bg-ink px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-50"
-              :disabled="creating"
-              type="submit"
-            >
-              {{ creating ? 'Creating...' : 'Create & Monitor' }}
-            </button>
-          </form>
-
-          <div class="mt-6 border-t border-slate-200 pt-4">
-            <h3 class="font-display text-lg">Monitor Task</h3>
-            <div class="mt-2 flex gap-2">
-              <select
-                v-model="store.monitorTaskId"
-                class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-sky"
-              >
-                <option value="">Select task</option>
-                <option v-for="task in store.tasks" :key="task.task_id" :value="task.task_id">
-                  {{ task.task_id }}
-                </option>
-              </select>
-              <button
-                class="rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:border-slate-500"
-                @click="monitorSelected"
-              >
-                Start
-              </button>
-              <button
-                class="rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:border-slate-500 disabled:opacity-50"
-                :disabled="syncing || !store.monitorTaskId"
-                @click="syncTask"
-              >
-                {{ syncing ? 'Syncing...' : 'Sync' }}
-              </button>
-            </div>
-            <div class="mt-2 grid grid-cols-2 gap-2">
-              <button
-                class="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-700 hover:border-amber-400 disabled:opacity-50"
-                :disabled="stopping || !store.monitorTaskId"
-                @click="stopTask"
-              >
-                {{ stopping ? 'Stopping...' : 'Stop Task' }}
-              </button>
-              <button
-                class="rounded-xl border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-700 hover:border-rose-400 disabled:opacity-50"
-                :disabled="cleaning || !store.monitorTaskId"
-                @click="cleanupTask"
-              >
-                {{ cleaning ? 'Cleaning...' : 'Cleanup Task' }}
-              </button>
-            </div>
-          </div>
-
-          <p v-if="message" class="mt-3 rounded-xl bg-slate-100 px-3 py-2 text-xs text-slate-700">{{ message }}</p>
-          <p v-if="store.lastError" class="mt-3 rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700">{{ store.lastError }}</p>
-          <p v-if="loading" class="mt-3 text-xs text-slate-500">Loading...</p>
-        </aside>
-
-        <section class="space-y-3">
-          <div class="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            <article class="rounded-2xl bg-white/85 p-3 shadow-panel backdrop-blur">
-              <p class="text-[11px] uppercase text-slate-500">task</p>
-              <p class="mt-1 truncate font-display text-sm">{{ store.monitorTaskId || '-' }}</p>
-            </article>
-            <article class="rounded-2xl bg-white/85 p-3 shadow-panel backdrop-blur">
-              <p class="text-[11px] uppercase text-slate-500">task state</p>
-              <p class="mt-1 font-display text-sm">{{ store.taskState }}</p>
-            </article>
-            <article class="rounded-2xl bg-white/85 p-3 shadow-panel backdrop-blur">
-              <p class="text-[11px] uppercase text-slate-500">stream</p>
-              <p class="mt-1 font-display text-sm">{{ store.connectionState }}</p>
-            </article>
-            <article class="rounded-2xl bg-white/85 p-3 shadow-panel backdrop-blur">
-              <p class="text-[11px] uppercase text-slate-500">robots</p>
-              <p class="mt-1 font-display text-sm">{{ store.robotList.length }}</p>
-            </article>
-            <article class="rounded-2xl bg-white/85 p-3 shadow-panel backdrop-blur">
-              <p class="text-[11px] uppercase text-slate-500">events</p>
-              <p class="mt-1 font-display text-sm">{{ store.eventCount }}</p>
-            </article>
-          </div>
-
-          <CanvasTopology
-            :task-id="store.monitorTaskId"
-            :task-state="store.taskState"
-            :connection-state="store.connectionState"
-            :robots="store.robotList"
-            :event-count="store.eventCount"
-          />
-        </section>
-      </section>
+  <div class="relative w-full h-full overflow-hidden bg-void">
+    <!-- Animated background -->
+    <div class="absolute inset-0 overflow-hidden pointer-events-none">
+      <!-- Gradient orbs -->
+      <div class="absolute -top-1/4 -left-1/4 w-[800px] h-[800px] rounded-full bg-neon-cyan/5 blur-[150px]"></div>
+      <div class="absolute -bottom-1/4 -right-1/4 w-[600px] h-[600px] rounded-full bg-neon-purple/5 blur-[120px]"></div>
+      <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1000px] h-[1000px] rounded-full bg-neon-pink/3 blur-[200px]"></div>
+      
+      <!-- Grid overlay -->
+      <div class="absolute inset-0 opacity-30" 
+           style="background-image: linear-gradient(rgba(0, 240, 255, 0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 240, 255, 0.02) 1px, transparent 1px); background-size: 100px 100px;">
+      </div>
     </div>
+
+    <!-- Header -->
+    <Header
+      :tasks="store.tasks"
+      :robot-types="store.robotTypes"
+      :current-task-id="store.monitorTaskId"
+      :is-subscribed="isSubscribed"
+      :connection-state="store.connectionState"
+      @create-task="handleCreateTask"
+      @select-task="handleSelectTask"
+      @subscribe="handleSubscribe"
+      @unsubscribe="handleUnsubscribe"
+      @delete-task="handleDeleteTask"
+      @refresh-tasks="handleRefreshTasks"
+    />
+
+    <!-- Main Content - Infinite Canvas -->
+    <main class="absolute inset-0 pt-16">
+      <InfiniteCanvas
+        :robots="store.robotList"
+        :task-id="store.monitorTaskId"
+        :task-state="store.taskState"
+      />
+    </main>
+
+    <!-- Toast Notification -->
+    <Transition name="toast">
+      <div v-if="store.lastError" 
+           class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-xl bg-neon-pink/20 border border-neon-pink/30 backdrop-blur-xl">
+        <div class="flex items-center gap-3">
+          <svg class="w-5 h-5 text-neon-pink" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+              d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span class="text-sm text-white">{{ store.lastError }}</span>
+          <button @click="store.lastError = ''" class="ml-2 text-slate-400 hover:text-white">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
+
+<style scoped>
+/* Toast animation */
+.toast-enter-active,
+.toast-leave-active {
+  transition: all 0.3s ease;
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(20px);
+}
+
+/* Smooth transitions */
+* {
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+</style>
