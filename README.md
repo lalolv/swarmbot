@@ -26,7 +26,7 @@ docker run --rm -p 6379:6379 redis:7
 uv run python -m pm_sports_bots.worker.main
 ```
 
-### 4) Start API (SSE bridge)
+### 4) Start API (task CRUD + SSE bridge)
 
 ```bash
 uv run uvicorn pm_sports_bots.api.main:app --host 0.0.0.0 --port 8000 --reload
@@ -38,7 +38,36 @@ uv run uvicorn pm_sports_bots.api.main:app --host 0.0.0.0 --port 8000 --reload
 uv run python scripts/publish_demo_task.py
 ```
 
-### 6) Subscribe SSE
+### 6) Task APIs
+
+Create task:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/tasks \
+  -H 'content-type: application/json' \
+  -d '{
+    "task_id": "demo-task-1",
+    "user_id": "u1",
+    "robots": ["sample_producer", "sample_consumer"],
+    "custom_config": {"poll_interval": 3.0}
+  }'
+```
+
+Update running task config (supports hot-reload robots):
+
+```bash
+curl -X PATCH http://127.0.0.1:8000/api/v1/tasks/demo-task-1 \
+  -H 'content-type: application/json' \
+  -d '{"robots": [{"type": "sample_producer", "config": {"poll_interval": 1.0}}]}'
+```
+
+Delete task (purge data):
+
+```bash
+curl -X DELETE "http://127.0.0.1:8000/api/v1/tasks/demo-task-1?purge=true"
+```
+
+### 7) Subscribe SSE
 
 Open:
 
