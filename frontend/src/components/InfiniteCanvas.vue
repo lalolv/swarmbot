@@ -26,6 +26,7 @@ const canvasSize = ref({ width: 0, height: 0 });
 
 // Robot positions (persisted during session)
 const robotPositions = ref(new Map());
+const isAnimating = ref(false);
 
 function initializeRobotPositions() {
   const newRobots = props.robots;
@@ -122,34 +123,60 @@ function onRobotMove(robotType, deltaX, deltaY) {
   }
 }
 
-function resetView() {
-  transform.value = { x: 0, y: 0, scale: 1 };
+function animateTransform(newTransform) {
+  isAnimating.value = true;
+  Object.assign(transform.value, newTransform);
+  setTimeout(() => { isAnimating.value = false; }, 300);
 }
 
-function centerRobots() {
+// 适配全部：自动缩放 + 平移，将所有卡片适配到视口内
+function fitAll() {
   if (props.robots.length === 0) return;
-  
+
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   let hasValidPositions = false;
-  
+
   for (const [_, pos] of robotPositions.value) {
     hasValidPositions = true;
-    minX = Math.min(minX, pos.x);
-    maxX = Math.max(maxX, pos.x + 340);
-    minY = Math.min(minY, pos.y);
-    maxY = Math.max(maxY, pos.y + 240);
+    // 卡片边界：center ± 半宽/半高（因为 translate(-50%, -50%)）
+    minX = Math.min(minX, pos.x - 170);
+    maxX = Math.max(maxX, pos.x + 170);
+    minY = Math.min(minY, pos.y - 120);
+    maxY = Math.max(maxY, pos.y + 120);
   }
-  
+
   if (!hasValidPositions) return;
-  
-  const robotsCenterX = (minX + maxX) / 2;
-  const robotsCenterY = (minY + maxY) / 2;
+
   const rect = canvasRef.value?.getBoundingClientRect();
-  if (rect) {
-    // Center the robots on screen: translate so robot center aligns with canvas center
-    transform.value.x = rect.width / 2 - robotsCenterX * transform.value.scale;
-    transform.value.y = rect.height / 2 - robotsCenterY * transform.value.scale;
-  }
+  if (!rect) return;
+
+  const contentW = maxX - minX;
+  const contentH = maxY - minY;
+  const padding = 60;
+
+  // 计算使所有卡片恰好填满视口的缩放比例，留出 padding
+  const scaleX = (rect.width - padding * 2) / contentW;
+  const scaleY = (rect.height - padding * 2) / contentH;
+  const scale = Math.max(0.3, Math.min(3, Math.min(scaleX, scaleY, 1)));
+
+  // 内容中心在容器坐标系中: (containerW/2 + avgX, containerH/2 + avgY)
+  const avgX = (minX + maxX) / 2;
+  const avgY = (minY + maxY) / 2;
+
+  animateTransform({
+    x: rect.width / 2 - (rect.width / 2 + avgX) * scale,
+    y: rect.height / 2 - (rect.height / 2 + avgY) * scale,
+    scale,
+  });
+}
+
+// 重置布局：卡片回到初始网格排列 + 视图归位
+function resetLayout() {
+  // 强制所有卡片重新排列
+  robotPositions.value.clear();
+  initializeRobotPositions();
+  // 视图归位
+  animateTransform({ x: 0, y: 0, scale: 1 });
 }
 </script>
 
@@ -164,8 +191,9 @@ function centerRobots() {
     @wheel="onWheel"
   >
     <!-- Transform container -->
-    <div 
+    <div
       class="absolute inset-0"
+      :class="{ 'transition-transform duration-300 ease-out': isAnimating }"
       :style="{
         transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
         transformOrigin: '0 0',
@@ -203,24 +231,28 @@ function centerRobots() {
 
     <!-- Controls -->
     <div class="absolute bottom-6 right-6 flex flex-col gap-2">
+      <!-- 适配全部：智能缩放+居中，显示所有卡片 -->
       <button
-        @click="resetView"
-        class="w-10 h-10 rounded-xl glass flex items-center justify-center text-slate-400 hover:text-white hover:border-neon-cyan/30 transition-all"
-        title="重置视图"
+        @click="fitAll"
+        :disabled="robots.length === 0"
+        class="w-10 h-10 rounded-xl glass flex items-center justify-center text-slate-400 hover:text-white hover:border-neon-cyan/30 transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-slate-400"
+        title="适配全部"
       >
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
         </svg>
       </button>
+      <!-- 重置布局：卡片回到网格 + 视图归位 -->
       <button
-        @click="centerRobots"
-        class="w-10 h-10 rounded-xl glass flex items-center justify-center text-slate-400 hover:text-white hover:border-neon-cyan/30 transition-all"
-        title="居中机器人"
+        @click="resetLayout"
+        :disabled="robots.length === 0"
+        class="w-10 h-10 rounded-xl glass flex items-center justify-center text-slate-400 hover:text-white hover:border-neon-cyan/30 transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-slate-400"
+        title="重置布局"
       >
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-            d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
         </svg>
       </button>
     </div>
