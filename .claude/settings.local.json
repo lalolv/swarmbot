@@ -1,7 +1,19 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npx vue-tsc:*)"
+      "Bash(npx vue-tsc:*)",
+      "WebFetch(domain:www.retroui.dev)",
+      "WebFetch(domain:neo-brutalism-ui-library.vercel.app)",
+      "WebFetch(domain:www.neobrutalism.dev)",
+      "WebSearch",
+      "WebFetch(domain:next.jqueryscript.net)",
+      "WebFetch(domain:neobrutalism-vue.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.neobrutalism-vue.com)",
+      "Bash(npx vite build:*)",
+      "Bash(while read f)",
+      "Bash(do sed -i '' 's/rounded-\\\\[var\\(--theme-radius\\)\\\\]/rounded-\\(--theme-radius\\)/g; s/border-\\\\[length:var\\(--theme-border-width\\)\\\\]/border-\\(length:--theme-border-width\\)/g' \"$f\")",
+      "Bash(done)"
     ]
   }
 }

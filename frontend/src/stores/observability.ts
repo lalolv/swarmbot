@@ -8,13 +8,51 @@ import {
   fetchTaskDetail,
   fetchTasks,
   purgeTask,
-} from "../api/client";
+  type TaskItem,
+  type TaskDetail,
+  type CreateTaskPayload,
+} from "@/api/client";
 
-function isoNow() {
+// ===== 类型定义 =====
+
+export interface LatestSignal {
+  type: string;
+  data: Record<string, unknown>;
+  timestamp: string;
+}
+
+export interface RobotState {
+  robot_type: string;
+  signals_in: number;
+  signals_out: number;
+  state: string;
+  last_error: string | null;
+  updated_at: string;
+  latest_signal: LatestSignal | null;
+}
+
+export interface StreamCounts {
+  data: number;
+  output: number;
+  control: number;
+  unknown: number;
+  [key: string]: number;
+}
+
+export interface CreateTaskForm {
+  taskId: string;
+  userId: string;
+  pollInterval: number;
+  selectedRobots: string[];
+}
+
+// ===== 工具函数 =====
+
+function isoNow(): string {
   return new Date().toISOString();
 }
 
-function parseEventData(event) {
+function parseEventData(event: MessageEvent): Record<string, unknown> {
   try {
     return JSON.parse(event.data || "{}");
   } catch {
@@ -22,45 +60,64 @@ function parseEventData(event) {
   }
 }
 
-function sleep(ms) {
+function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
 }
 
-function isTaskNotFoundError(error) {
-  const message = String(error?.message || "");
+function isTaskNotFoundError(error: unknown): boolean {
+  const message = String((error as Error)?.message || "");
   return message.includes("HTTP 404") || message.includes("Task not found");
 }
 
+function makeDefaultRobot(robotType: string): RobotState {
+  return {
+    robot_type: robotType,
+    signals_in: 0,
+    signals_out: 0,
+    state: "idle",
+    last_error: null,
+    updated_at: isoNow(),
+    latest_signal: null,
+  };
+}
+
+// ===== Store =====
+
 export const useObservabilityStore = defineStore("observability", {
   state: () => ({
-    robotTypes: [],
-    tasks: [],
+    robotTypes: [] as string[],
+    tasks: [] as TaskItem[],
     monitorTaskId: "",
     taskState: "idle",
-    connectionState: "idle",
-    robots: {},
+    connectionState: "idle" as string,
+    robots: {} as Record<string, RobotState>,
     streamCounts: {
       data: 0,
       output: 0,
       control: 0,
       unknown: 0,
-    },
+    } as StreamCounts,
     eventCount: 0,
     lastError: "",
-    _source: null,
+    _source: null as EventSource | null,
   }),
 
   getters: {
-    robotList(state) {
-      return Object.values(state.robots).sort((a, b) => a.robot_type.localeCompare(b.robot_type));
+    robotList(state): RobotState[] {
+      return Object.values(state.robots).sort((a, b) =>
+        a.robot_type.localeCompare(b.robot_type)
+      );
     },
   },
 
   actions: {
     async initialize() {
-      const [tasksRes, robotsRes] = await Promise.all([fetchTasks(), fetchRobotTypes()]);
+      const [tasksRes, robotsRes] = await Promise.all([
+        fetchTasks(),
+        fetchRobotTypes(),
+      ]);
       this.tasks = tasksRes.items || [];
       this.robotTypes = robotsRes.robot_types || [];
       if (!this.monitorTaskId && this.tasks.length > 0) {
@@ -76,13 +133,13 @@ export const useObservabilityStore = defineStore("observability", {
       }
     },
 
-    async createNewTask(form) {
-      const selectedRobots = form.selectedRobots.filter((name) => Boolean(name));
+    async createNewTask(form: CreateTaskForm) {
+      const selectedRobots = form.selectedRobots.filter(Boolean);
       if (selectedRobots.length === 0) {
         throw new Error("至少选择一个机器人类型");
       }
 
-      const payload = {
+      const payload: CreateTaskPayload = {
         task_id: form.taskId || undefined,
         user_id: form.userId || "",
         robots: selectedRobots,
@@ -98,7 +155,7 @@ export const useObservabilityStore = defineStore("observability", {
       return result;
     },
 
-    async startMonitoring(taskId) {
+    async startMonitoring(taskId: string) {
       if (!taskId) {
         throw new Error("请先输入或选择任务 ID");
       }
@@ -110,13 +167,15 @@ export const useObservabilityStore = defineStore("observability", {
       this.lastError = "";
       this.streamCounts = { data: 0, output: 0, control: 0, unknown: 0 };
 
-      let detail;
+      let detail: TaskDetail;
       try {
         detail = await this.fetchTaskDetailWithRetry(taskId);
       } catch (error) {
         if (isTaskNotFoundError(error)) {
           await this.refreshTasks();
-          const stillExists = this.tasks.some((item) => item.task_id === taskId);
+          const stillExists = this.tasks.some(
+            (item) => item.task_id === taskId
+          );
           if (!stillExists) {
             this.monitorTaskId = this.tasks[0]?.task_id || "";
           }
@@ -136,7 +195,9 @@ export const useObservabilityStore = defineStore("observability", {
         this.connectionState = "reconnecting";
       };
 
-      const forward = (eventType) => (event) => this.handleEvent(eventType, event);
+      const forward =
+        (eventType: string) => (event: MessageEvent) =>
+          this.handleEvent(eventType, event);
       source.addEventListener("task_status", forward("task_status"));
       source.addEventListener("robot_status", forward("robot_status"));
       source.addEventListener("data_update", forward("data_update"));
@@ -148,7 +209,7 @@ export const useObservabilityStore = defineStore("observability", {
       this._source = source;
     },
 
-    async stopTask(taskId) {
+    async stopTask(taskId: string) {
       if (!taskId) {
         throw new Error("请先选择任务");
       }
@@ -157,7 +218,7 @@ export const useObservabilityStore = defineStore("observability", {
       return result;
     },
 
-    async cleanupTask(taskId) {
+    async cleanupTask(taskId: string) {
       if (!taskId) {
         throw new Error("请先选择任务");
       }
@@ -172,16 +233,19 @@ export const useObservabilityStore = defineStore("observability", {
       return result;
     },
 
-    async fetchTaskDetailWithRetry(taskId, maxAttempts = 10, delayMs = 300) {
-      let lastError = null;
+    async fetchTaskDetailWithRetry(
+      taskId: string,
+      maxAttempts = 10,
+      delayMs = 300
+    ): Promise<TaskDetail> {
+      let lastError: Error | null = null;
       for (let i = 0; i < maxAttempts; i += 1) {
         try {
           return await fetchTaskDetail(taskId);
         } catch (error) {
-          lastError = error;
-          const message = String(error?.message || "");
-          const isNotFound = message.includes("HTTP 404");
-          if (!isNotFound) {
+          lastError = error as Error;
+          const message = String((error as Error)?.message || "");
+          if (!message.includes("HTTP 404")) {
             throw error;
           }
           await sleep(delayMs);
@@ -200,9 +264,9 @@ export const useObservabilityStore = defineStore("observability", {
       }
     },
 
-    handleEvent(eventType, event) {
+    handleEvent(eventType: string, event: MessageEvent) {
       this.eventCount += 1;
-      const payload = parseEventData(event);
+      const payload = parseEventData(event) as Record<string, any>;
       const stream = event.lastEventId?.split("|")[0] || "unknown";
 
       if (stream in this.streamCounts) {
@@ -217,15 +281,7 @@ export const useObservabilityStore = defineStore("observability", {
 
       if (eventType === "robot_status") {
         const robotType = payload.robot_type || "unknown";
-        const prev = this.robots[robotType] || {
-          robot_type: robotType,
-          signals_in: 0,
-          signals_out: 0,
-          state: "idle",
-          last_error: null,
-          updated_at: isoNow(),
-          latest_signal: null,
-        };
+        const prev = this.robots[robotType] || makeDefaultRobot(robotType);
         this.robots = {
           ...this.robots,
           [robotType]: {
@@ -238,15 +294,7 @@ export const useObservabilityStore = defineStore("observability", {
 
       if (eventType === "data_update" || eventType === "process_result") {
         const robotType = payload.robot_type || "unknown";
-        const prev = this.robots[robotType] || {
-          robot_type: robotType,
-          signals_in: 0,
-          signals_out: 0,
-          state: "idle",
-          last_error: null,
-          updated_at: isoNow(),
-          latest_signal: null,
-        };
+        const prev = this.robots[robotType] || makeDefaultRobot(robotType);
         this.robots = {
           ...this.robots,
           [robotType]: {
@@ -271,21 +319,12 @@ export const useObservabilityStore = defineStore("observability", {
       }
     },
 
-    upsertRobotsFromDetail(detail) {
+    upsertRobotsFromDetail(detail: TaskDetail) {
       for (const robot of detail?.robots || []) {
-        const robotType = typeof robot === "string" ? robot : robot.type;
-        if (!robotType) {
-          continue;
-        }
-        const prev = this.robots[robotType] || {
-          robot_type: robotType,
-          signals_in: 0,
-          signals_out: 0,
-          state: "idle",
-          last_error: null,
-          updated_at: isoNow(),
-          latest_signal: null,
-        };
+        const robotType =
+          typeof robot === "string" ? robot : (robot as { type: string }).type;
+        if (!robotType) continue;
+        const prev = this.robots[robotType] || makeDefaultRobot(robotType);
         this.robots = {
           ...this.robots,
           [robotType]: {
@@ -300,13 +339,15 @@ export const useObservabilityStore = defineStore("observability", {
       if (!taskId) {
         throw new Error("请先选择任务");
       }
-      let detail;
+      let detail: TaskDetail;
       try {
         detail = await fetchTaskDetail(taskId);
       } catch (error) {
         if (isTaskNotFoundError(error)) {
           await this.refreshTasks();
-          const stillExists = this.tasks.some((item) => item.task_id === taskId);
+          const stillExists = this.tasks.some(
+            (item) => item.task_id === taskId
+          );
           if (!stillExists) {
             this.monitorTaskId = this.tasks[0]?.task_id || "";
           }

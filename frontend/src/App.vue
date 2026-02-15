@@ -1,29 +1,35 @@
-<script setup>
+<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted } from "vue";
 
 import Header from "./components/Header.vue";
 import InfiniteCanvas from "./components/InfiniteCanvas.vue";
+import { Alert } from "./components/ui/alert";
 import { useObservabilityStore } from "./stores/observability";
+import { useTheme } from "./composables/useTheme";
 
 const store = useObservabilityStore();
+const { isDark } = useTheme();
 
 // Computed
-const isSubscribed = computed(() => store.connectionState === "connected" || store.connectionState === "connecting");
+const isSubscribed = computed(
+  () =>
+    store.connectionState === "connected" ||
+    store.connectionState === "connecting"
+);
 
 // Methods
-async function handleCreateTask(form) {
+async function handleCreateTask(form: any) {
   await store.createNewTask(form);
 }
 
-async function handleSelectTask(taskId) {
+async function handleSelectTask(taskId: string) {
   store.monitorTaskId = taskId;
-  // Unsubscribe from current task if subscribed
   if (isSubscribed.value) {
     store.stopMonitoring();
   }
 }
 
-async function handleSubscribe(taskId) {
+async function handleSubscribe(taskId: string) {
   await store.startMonitoring(taskId);
 }
 
@@ -31,7 +37,7 @@ function handleUnsubscribe() {
   store.stopMonitoring();
 }
 
-async function handleDeleteTask(taskId) {
+async function handleDeleteTask(taskId: string) {
   await store.cleanupTask(taskId);
 }
 
@@ -50,16 +56,13 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="relative w-full h-full overflow-hidden bg-void">
-    <!-- Animated background -->
-    <div class="absolute inset-0 overflow-hidden pointer-events-none">
-      <!-- Gradient orbs -->
-      <div class="absolute -top-1/4 -left-1/4 w-[800px] h-[800px] rounded-full bg-neon-cyan/5 blur-[150px]"></div>
-      <div class="absolute -bottom-1/4 -right-1/4 w-[600px] h-[600px] rounded-full bg-neon-purple/5 blur-[120px]"></div>
-      <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1000px] h-[1000px] rounded-full bg-neon-pink/3 blur-[200px]"></div>
-      
-      <!-- Grid overlay -->
-      <div class="absolute inset-0 opacity-30" 
+  <div class="relative w-full h-full overflow-hidden bg-background">
+    <!-- Neon Dark 背景效果 -->
+    <div v-if="isDark" class="absolute inset-0 overflow-hidden pointer-events-none">
+      <div class="absolute -top-1/4 -left-1/4 w-[800px] h-[800px] rounded-full bg-primary/5 blur-[150px]"></div>
+      <div class="absolute -bottom-1/4 -right-1/4 w-[600px] h-[600px] rounded-full bg-secondary/5 blur-[120px]"></div>
+      <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1000px] h-[1000px] rounded-full bg-accent/3 blur-[200px]"></div>
+      <div class="absolute inset-0 opacity-30"
            style="background-image: linear-gradient(rgba(0, 240, 255, 0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 240, 255, 0.02) 1px, transparent 1px); background-size: 100px 100px;">
       </div>
     </div>
@@ -79,7 +82,7 @@ onBeforeUnmount(() => {
       @refresh-tasks="handleRefreshTasks"
     />
 
-    <!-- Main Content - Infinite Canvas -->
+    <!-- Main Content -->
     <main class="absolute inset-0 pt-16">
       <InfiniteCanvas
         :robots="store.robotList"
@@ -90,40 +93,34 @@ onBeforeUnmount(() => {
 
     <!-- Toast Notification -->
     <Transition name="toast">
-      <div v-if="store.lastError" 
-           class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-xl bg-neon-pink/20 border border-neon-pink/30 backdrop-blur-xl">
-        <div class="flex items-center gap-3">
-          <svg class="w-5 h-5 text-neon-pink" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-              d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      <Alert
+        v-if="store.lastError"
+        variant="destructive"
+        class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 max-w-md"
+      >
+        <svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <span class="text-sm flex-1">{{ store.lastError }}</span>
+        <button @click="store.lastError = ''" class="ml-2 opacity-60 hover:opacity-100">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
           </svg>
-          <span class="text-sm text-white">{{ store.lastError }}</span>
-          <button @click="store.lastError = ''" class="ml-2 text-slate-400 hover:text-white">
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      </div>
+        </button>
+      </Alert>
     </Transition>
   </div>
 </template>
 
 <style scoped>
-/* Toast animation */
 .toast-enter-active,
 .toast-leave-active {
   transition: all 0.3s ease;
 }
-
 .toast-enter-from,
 .toast-leave-to {
   opacity: 0;
   transform: translateX(-50%) translateY(20px);
-}
-
-/* Smooth transitions */
-* {
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 </style>

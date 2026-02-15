@@ -1,0 +1,185 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap");
+
+@import "tailwindcss";
+@import "./themes/neobrutalism.css";
+@import "./themes/dark.css";
+
+@theme {
+  /* 语义色 — 从 CSS 变量映射 */
+  --color-background: var(--theme-background);
+  --color-foreground: var(--theme-foreground);
+  --color-card: var(--theme-card);
+  --color-card-foreground: var(--theme-card-foreground);
+  --color-primary: var(--theme-primary);
+  --color-primary-foreground: var(--theme-primary-foreground);
+  --color-secondary: var(--theme-secondary);
+  --color-secondary-foreground: var(--theme-secondary-foreground);
+  --color-accent: var(--theme-accent);
+  --color-accent-foreground: var(--theme-accent-foreground);
+  --color-destructive: var(--theme-destructive);
+  --color-muted: var(--theme-muted);
+  --color-muted-foreground: var(--theme-muted-foreground);
+  --color-border: var(--theme-border);
+  --color-ring: var(--theme-ring);
+  --color-surface: var(--theme-surface);
+
+  /* 字体 */
+  --font-display: "Space Grotesk", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  --font-body: "Inter", sans-serif;
+
+  /* 边框 */
+  --radius-base: var(--theme-radius);
+
+  /* 阴影 */
+  --shadow-card: var(--theme-shadow-card);
+  --shadow-card-hover: var(--theme-shadow-card-hover);
+}
+
+/* ===== 全局重置 ===== */
+* {
+  box-sizing: border-box;
+}
+
+html, body, #app {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: "Inter", sans-serif;
+  background: var(--theme-background);
+  color: var(--theme-foreground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ===== 滚动条 ===== */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--theme-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--theme-muted-foreground);
+}
+
+/* ===== Neo-Brutalism 主题特有工具类 ===== */
+@layer components {
+  .nb-border {
+    border: var(--theme-border-width) solid var(--theme-border);
+    border-radius: var(--theme-radius);
+  }
+
+  .nb-shadow {
+    box-shadow: var(--theme-shadow-card);
+  }
+
+  .nb-shadow-hover {
+    box-shadow: var(--theme-shadow-card-hover);
+  }
+
+  /* 状态点 */
+  .status-dot {
+    @apply w-2 h-2 rounded-full;
+  }
+
+  .status-running {
+    background: #00ff88;
+    color: #00ff88;
+    box-shadow: 0 0 10px #00ff88;
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  .status-idle {
+    background: #64748b;
+    color: #64748b;
+  }
+
+  .status-error {
+    background: var(--theme-destructive);
+    color: var(--theme-destructive);
+    box-shadow: 0 0 10px var(--theme-destructive);
+    animation: pulse 1s ease-in-out infinite;
+  }
+
+  .status-connecting {
+    background: #ffee00;
+    color: #ffee00;
+    box-shadow: 0 0 10px #ffee00;
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+}
+
+/* ===== Neon Dark 主题特有效果 ===== */
+[data-theme="dark"] .glass {
+  background: rgba(26, 26, 37, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .glass-strong {
+  background: rgba(37, 37, 50, 0.85);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+[data-theme="dark"] .neon-glow {
+  box-shadow:
+    0 0 0 1px rgba(0, 240, 255, 0.3),
+    0 0 20px rgba(0, 240, 255, 0.2),
+    inset 0 0 20px rgba(0, 240, 255, 0.05);
+}
+
+[data-theme="dark"] .gradient-text {
+  background: linear-gradient(135deg, #00f0ff, #b829ff, #ff2d95);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ===== Canvas grid ===== */
+.canvas-grid {
+  background-image:
+    linear-gradient(var(--theme-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--theme-grid) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* ===== 通用动画 ===== */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-down {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
+}
+
+.animate-slide-down {
+  animation: slide-down 0.2s ease-out;
+}
