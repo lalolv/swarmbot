@@ -335,23 +335,24 @@ export const useObservabilityStore = defineStore("observability", {
       }
     },
 
-    async syncTaskRobots(taskId = this.monitorTaskId) {
-      if (!taskId) {
+    async syncTaskRobots(taskId?: string) {
+      const resolvedId = taskId || this.monitorTaskId;
+      if (!resolvedId) {
         throw new Error("请先选择任务");
       }
       let detail: TaskDetail;
       try {
-        detail = await fetchTaskDetail(taskId);
+        detail = await fetchTaskDetail(resolvedId);
       } catch (error) {
         if (isTaskNotFoundError(error)) {
           await this.refreshTasks();
           const stillExists = this.tasks.some(
-            (item) => item.task_id === taskId
+            (item) => item.task_id === resolvedId
           );
           if (!stillExists) {
             this.monitorTaskId = this.tasks[0]?.task_id || "";
           }
-          throw new Error(`任务不存在或已被清理: ${taskId}`);
+          throw new Error(`任务不存在或已被清理: ${resolvedId}`);
         }
         throw error;
       }

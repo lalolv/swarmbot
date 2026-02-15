@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { cn } from "@/lib/utils";
+import type { ClassValue } from "clsx";
 
 const props = defineProps<{
-  class?: string;
+  class?: ClassValue;
 }>();
 </script>
 
