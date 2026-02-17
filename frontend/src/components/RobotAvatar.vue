@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
 
+export type Expression = "neutral" | "receiving" | "sending" | "happy" | "error";
+
 const props = defineProps<{
   /** 机器人主题色 (hex) */
   color: string;
@@ -10,7 +12,11 @@ const props = defineProps<{
   uid?: string;
   /** 尺寸缩放（基准 40×44） */
   size?: number;
+  /** 表情类型 */
+  expression?: Expression;
 }>();
+
+const expr = computed(() => props.expression || "neutral");
 
 interface StateInfo {
   dotColor: string;
@@ -59,9 +65,52 @@ const svgHeight = computed(() => 44 * (props.size || 1));
       <g :opacity="info.bodyOpacity">
         <rect x="6" y="12" width="28" height="22" rx="5"
               :stroke="color" stroke-width="1.5" fill="none" opacity="0.8" />
-        <rect x="12" y="19" width="5" height="5" rx="1.5" :fill="color" opacity="0.85" />
-        <rect x="23" y="19" width="5" height="5" rx="1.5" :fill="color" opacity="0.85" />
-        <rect x="14" y="28" width="12" height="2" rx="1" :fill="color" opacity="0.5" />
+        <!-- 眼睛 -->
+        <g class="robot-eyes" :class="`eyes-${expr}`">
+          <!-- neutral: 正常方块眼 -->
+          <template v-if="expr === 'neutral'">
+            <rect x="12" y="19" width="5" height="5" rx="1.5" :fill="color" opacity="0.85" />
+            <rect x="23" y="19" width="5" height="5" rx="1.5" :fill="color" opacity="0.85" />
+          </template>
+          <!-- receiving: 放大圆眼 + 闪烁 -->
+          <template v-else-if="expr === 'receiving'">
+            <circle cx="14.5" cy="21.5" r="3" :fill="color" opacity="0.9" />
+            <circle cx="25.5" cy="21.5" r="3" :fill="color" opacity="0.9" />
+          </template>
+          <!-- sending: 窄眼（专注） -->
+          <template v-else-if="expr === 'sending'">
+            <rect x="11.5" y="20.5" width="6" height="2.5" rx="1.25" :fill="color" opacity="0.85" />
+            <rect x="22.5" y="20.5" width="6" height="2.5" rx="1.25" :fill="color" opacity="0.85" />
+          </template>
+          <!-- happy: 弯弯眼 ^_^ -->
+          <template v-else-if="expr === 'happy'">
+            <path d="M11.5 22 Q14.5 18, 17.5 22" :stroke="color" stroke-width="1.8" stroke-linecap="round" fill="none" opacity="0.9" />
+            <path d="M22.5 22 Q25.5 18, 28.5 22" :stroke="color" stroke-width="1.8" stroke-linecap="round" fill="none" opacity="0.9" />
+          </template>
+          <!-- error: X 形眼 -->
+          <template v-else-if="expr === 'error'">
+            <g opacity="0.9">
+              <line x1="12" y1="18.5" x2="17" y2="23.5" :stroke="color" stroke-width="1.5" stroke-linecap="round" />
+              <line x1="17" y1="18.5" x2="12" y2="23.5" :stroke="color" stroke-width="1.5" stroke-linecap="round" />
+              <line x1="23" y1="18.5" x2="28" y2="23.5" :stroke="color" stroke-width="1.5" stroke-linecap="round" />
+              <line x1="28" y1="18.5" x2="23" y2="23.5" :stroke="color" stroke-width="1.5" stroke-linecap="round" />
+            </g>
+          </template>
+        </g>
+
+        <!-- 嘴巴 -->
+        <g class="robot-mouth" :class="`mouth-${expr}`">
+          <!-- neutral: 短横线 -->
+          <rect v-if="expr === 'neutral'" x="16" y="28" width="8" height="2" rx="1" :fill="color" opacity="0.5" />
+          <!-- receiving: 张开的 O 形 -->
+          <ellipse v-else-if="expr === 'receiving'" cx="20" cy="29" rx="2.5" ry="2" :stroke="color" stroke-width="1.2" fill="none" opacity="0.7" />
+          <!-- sending: 向右箭头形 -->
+          <path v-else-if="expr === 'sending'" d="M17 27.5 L22 29 L17 30.5" :stroke="color" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.7" />
+          <!-- happy: 微笑弧线 -->
+          <path v-else-if="expr === 'happy'" d="M16 28 Q20 32, 24 28" :stroke="color" stroke-width="1.4" stroke-linecap="round" fill="none" opacity="0.7" />
+          <!-- error: 波浪线 -->
+          <path v-else-if="expr === 'error'" d="M15 29 Q17 27.5, 19 29 Q20 30, 21 29 Q23 27.5, 25 29" :stroke="color" stroke-width="1.2" stroke-linecap="round" fill="none" opacity="0.6" />
+        </g>
         <rect x="2" y="18" width="4" height="8" rx="2" :fill="color" opacity="0.4" />
         <rect x="34" y="18" width="4" height="8" rx="2" :fill="color" opacity="0.4" />
         <line x1="15" y1="34" x2="15" y2="40" :stroke="color" stroke-width="1" opacity="0.3" />
@@ -136,5 +185,73 @@ const svgHeight = computed(() => 44 * (props.size || 1));
 @keyframes antenna-ping {
   0% { r: 3; opacity: 0.4; }
   100% { r: 7; opacity: 0; }
+}
+
+/* --- 表情动画 --- */
+.robot-eyes,
+.robot-mouth {
+  transition: opacity 0.2s ease;
+}
+
+/* receiving: 眼睛闪烁 */
+.eyes-receiving {
+  animation: eyes-blink 0.6s ease-in-out infinite;
+}
+
+@keyframes eyes-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* receiving: 嘴巴缩放脉冲 */
+.mouth-receiving {
+  animation: mouth-pulse 0.6s ease-in-out infinite;
+  transform-origin: 20px 29px;
+}
+
+@keyframes mouth-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+}
+
+/* sending: 嘴巴向右平移动画 */
+.mouth-sending {
+  animation: mouth-send 0.8s ease-in-out infinite;
+}
+
+@keyframes mouth-send {
+  0%, 100% { transform: translateX(0); opacity: 0.7; }
+  50% { transform: translateX(2px); opacity: 1; }
+}
+
+/* happy: 轻微上下弹跳 */
+.eyes-happy {
+  animation: happy-bounce 0.5s ease-out;
+}
+
+@keyframes happy-bounce {
+  0% { transform: translateY(0); }
+  40% { transform: translateY(-2px); }
+  100% { transform: translateY(0); }
+}
+
+/* error: 抖动 */
+.eyes-error {
+  animation: error-shake 0.4s ease-in-out infinite;
+}
+
+@keyframes error-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-1px); }
+  75% { transform: translateX(1px); }
+}
+
+.mouth-error {
+  animation: error-wobble 1.2s ease-in-out infinite;
+}
+
+@keyframes error-wobble {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(1px); }
 }
 </style>

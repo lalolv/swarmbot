@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import RobotAvatar from "./RobotAvatar.vue";
+import type { Expression } from "./RobotAvatar.vue";
 import { Card } from "@/components/ui/card";
 import type { RobotState } from "@/stores/observability";
 import { useThemeStore } from "@/stores/theme";
@@ -132,6 +133,67 @@ const genericEntries = computed(() => {
   );
   return entries.length > 0 ? entries : null;
 });
+
+// --- 表情动画 ---
+const expression = ref<Expression>("neutral");
+let expressionTimer: ReturnType<typeof setTimeout> | null = null;
+
+function setTempExpression(expr: Expression, duration = 1500) {
+  if (expressionTimer) clearTimeout(expressionTimer);
+  expression.value = expr;
+  expressionTimer = setTimeout(() => {
+    // 回到 neutral，但 error 状态由下面的 watch 控制
+    if (props.robot.state !== "error") {
+      expression.value = "neutral";
+    }
+    expressionTimer = null;
+  }, duration);
+}
+
+// error 状态始终强制 error 表情
+watch(
+  () => props.robot.state,
+  (state) => {
+    if (state === "error") {
+      if (expressionTimer) clearTimeout(expressionTimer);
+      expression.value = "error";
+    } else if (expression.value === "error") {
+      expression.value = "neutral";
+    }
+  },
+  { immediate: true }
+);
+
+// 监听 signals_in 变化 → receiving → 短暂 happy
+watch(
+  () => props.robot.signals_in,
+  (newVal, oldVal) => {
+    if (oldVal != null && newVal !== oldVal && props.robot.state !== "error") {
+      setTempExpression("receiving", 1200);
+      setTimeout(() => {
+        if (props.robot.state !== "error" && expression.value === "receiving") {
+          setTempExpression("happy", 800);
+        }
+      }, 1200);
+    }
+  }
+);
+
+// 监听 signals_out 变化 → sending → 短暂 happy
+watch(
+  () => props.robot.signals_out,
+  (newVal, oldVal) => {
+    if (oldVal != null && newVal !== oldVal && props.robot.state !== "error") {
+      setTempExpression("sending", 1200);
+      // sending 结束后短暂 happy
+      setTimeout(() => {
+        if (props.robot.state !== "error" && expression.value === "sending") {
+          setTempExpression("happy", 800);
+        }
+      }, 1200);
+    }
+  }
+);
 </script>
 
 <template>
@@ -148,7 +210,7 @@ const genericEntries = computed(() => {
   >
     <!-- Header -->
     <div class="flex items-center gap-3 mb-3">
-      <RobotAvatar :color="colorHex" :state="robot.state" :uid="robot.robot_type" />
+      <RobotAvatar :color="colorHex" :state="robot.state" :uid="robot.robot_type" :expression="expression" />
 
       <div class="flex-1 min-w-0">
         <h4 class="font-display font-bold text-foreground text-sm truncate">
