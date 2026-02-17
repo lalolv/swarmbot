@@ -7,15 +7,16 @@ import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from loguru import logger
 
 from pm_sports_bots.shared import Channels, RedisClient
+from pm_sports_bots.shared.channels import SignalType, StreamName
 
 
-class RobotState(str, Enum):
+class RobotState(StrEnum):
     """机器人运行状态。"""
 
     IDLE = "idle"
@@ -102,9 +103,10 @@ class RobotStatus:
 class BaseRobot(ABC):
     """机器人抽象基类。
 
-    两种工作模式：
-    1. 轮询型（Producer）：无 input_streams，通过 tick_interval + on_tick() 周期性产生数据
-    2. 响应型（Consumer）：订阅 input_streams，在 on_signal() 中处理输入信号
+    每个机器人都可以同时接收信号和发出信号。
+    通过 input_streams / output_streams 声明订阅和发布的 stream。
+    通过 on_signal() 处理输入信号，通过 on_tick() 执行定时逻辑。
+    两者可自由组合，不互斥。
 
     生命周期：__init__ → start() → run_loop() → stop()
     """
@@ -132,31 +134,28 @@ class BaseRobot(ABC):
     def robot_type(self) -> str:
         """机器人类型标识。"""
 
-    @property
-    @abstractmethod
-    def input_streams(self) -> list[str]:
-        """订阅的 stream 名列表。空列表表示轮询型机器人。"""
-
-    @property
-    @abstractmethod
-    def output_streams(self) -> list[str]:
-        """发布的 stream 名列表。"""
-
     @abstractmethod
     async def setup(self) -> None:
         """初始化资源（连接外部服务、验证配置等）。"""
 
-    @abstractmethod
-    async def on_signal(self, stream: str, signal: Signal) -> None:
-        """处理输入信号。"""
+    # ========== 子类声明（覆盖类变量即可） ==========
+
+    input_streams: list[StreamName] = []
+    """订阅的 stream 名列表。空列表表示不订阅任何 stream。"""
+
+    output_streams: list[StreamName] = []
+    """发布的 stream 名列表。空列表表示不发布到任何 stream。"""
 
     # ========== 可选覆盖 ==========
 
-    async def teardown(self) -> None:
-        """清理资源（关闭连接、释放锁等）。"""
+    async def on_signal(self, stream: str, signal: Signal) -> None:
+        """处理输入信号。有 input_streams 时应覆盖此方法。"""
 
     async def on_tick(self) -> None:
         """定时回调（仅当 tick_interval 不为 None 时触发）。"""
+
+    async def teardown(self) -> None:
+        """清理资源（关闭连接、释放锁等）。"""
 
     @property
     def tick_interval(self) -> float | None:
@@ -177,13 +176,13 @@ class BaseRobot(ABC):
 
         try:
             await self.setup()
-            await self.emit(Channels.STREAM_CONTROL, "robot_start", {"robot_type": self.robot_type})
+            await self.emit(StreamName.CONTROL, SignalType.ROBOT_START, {"robot_type": self.robot_type})
         except Exception as exc:
             self._state = RobotState.ERROR
             self._last_error = str(exc)
             logger.error("Robot {} setup 失败: {}", self.robot_type, exc)
             try:
-                await self.emit(Channels.STREAM_CONTROL, "robot_error", {
+                await self.emit(StreamName.CONTROL, SignalType.ROBOT_ERROR, {
                     "robot_type": self.robot_type,
                     "stage": "setup",
                     "error": str(exc),
@@ -209,7 +208,7 @@ class BaseRobot(ABC):
             logger.warning("Robot {} teardown 异常: {}", self.robot_type, exc)
         self._state = RobotState.STOPPED
         try:
-            await self.emit(Channels.STREAM_CONTROL, "robot_stop", {"robot_type": self.robot_type})
+            await self.emit(StreamName.CONTROL, SignalType.ROBOT_STOP, {"robot_type": self.robot_type})
         except Exception:
             pass
         logger.info("Robot 已停止: type={} task={}", self.robot_type, self.task_id)
@@ -271,8 +270,8 @@ class BaseRobot(ABC):
                                 )
                                 self._last_error = str(exc)
                                 await self.emit(
-                                    Channels.STREAM_CONTROL,
-                                    "robot_error",
+                                    StreamName.CONTROL,
+                                    SignalType.ROBOT_ERROR,
                                     {
                                         "robot_type": self.robot_type,
                                         "stage": "on_signal",
@@ -291,7 +290,7 @@ class BaseRobot(ABC):
             self._last_error = str(exc)
             logger.error("Robot {} run_loop 异常: {}", self.robot_type, exc)
             try:
-                await self.emit(Channels.STREAM_CONTROL, "robot_error", {
+                await self.emit(StreamName.CONTROL, SignalType.ROBOT_ERROR, {
                     "robot_type": self.robot_type,
                     "stage": "run_loop",
                     "error": str(exc),
@@ -305,22 +304,22 @@ class BaseRobot(ABC):
 
     async def emit(
         self,
-        stream: str,
-        signal_type: str,
+        stream: StreamName | str,
+        signal_type: SignalType | str,
         data: dict[str, Any],
         *,
         maxlen: int = 1000,
     ) -> str:
         """发出信号到指定 stream。"""
         signal = Signal(
-            type=signal_type,
+            type=str(signal_type),
             source=self.robot_type,
             task_id=self.task_id,
             timestamp=_now_iso(),
             data=data,
         )
         msg_id = await self.redis.xadd(
-            self._stream_key(stream),
+            self._stream_key(str(stream)),
             signal.to_fields(),
             maxlen=maxlen,
         )

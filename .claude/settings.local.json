@@ -13,7 +13,9 @@
       "Bash(npx vite build:*)",
       "Bash(while read f)",
       "Bash(do sed -i '' 's/rounded-\\\\[var\\(--theme-radius\\)\\\\]/rounded-\\(--theme-radius\\)/g; s/border-\\\\[length:var\\(--theme-border-width\\)\\\\]/border-\\(length:--theme-border-width\\)/g' \"$f\")",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(uv run python:*)",
+      "Bash(uv run ruff check:*)"
     ]
   }
 }

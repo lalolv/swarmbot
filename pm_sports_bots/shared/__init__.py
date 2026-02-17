@@ -1,11 +1,13 @@
 """共享模块"""
 
-from .channels import Channels
+from .channels import Channels, SignalType, StreamName
 from .task_models import TaskState, TaskStatus, TaskConfig
 from .redis_client import RedisClient, get_redis
 
 __all__ = [
     "Channels",
+    "SignalType",
+    "StreamName",
     "TaskState",
     "TaskStatus",
     "TaskConfig",

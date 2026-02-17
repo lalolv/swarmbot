@@ -7,9 +7,9 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from loguru import logger
+
+from pm_sports_bots.shared.channels import SignalType, StreamName
 
 from .base import BaseRobot, Signal
 
@@ -22,8 +22,8 @@ class SampleConsumer(BaseRobot):
     """
 
     robot_type = "sample_consumer"
-    input_streams: list[str] = ["data"]      # 🔧 自定义点: 修改订阅的 stream
-    output_streams: list[str] = ["output"]   # 🔧 自定义点: 修改输出 stream
+    input_streams: list[StreamName] = [StreamName.DATA]     # 🔧 自定义点: 修改订阅的 stream
+    output_streams: list[StreamName] = [StreamName.OUTPUT]  # 🔧 自定义点: 修改输出 stream
 
     async def setup(self) -> None:
         """初始化资源。"""
@@ -36,7 +36,7 @@ class SampleConsumer(BaseRobot):
         根据 signal.type 路由到不同的处理方法。
         """
         # 🔧 自定义点: 添加你的信号类型处理逻辑
-        if signal.type == "data_update":
+        if signal.type == SignalType.DATA_UPDATE:
             await self._handle_data_update(signal)
         else:
             logger.debug(
@@ -75,7 +75,7 @@ class SampleConsumer(BaseRobot):
             "result_value": transformed,
             "timestamp": signal.timestamp,
         }
-        await self.emit("output", "process_result", result)
+        await self.emit(StreamName.OUTPUT, SignalType.PROCESS_RESULT, result)
         logger.debug(
             "SampleConsumer 已处理随机数: task={} input={} result={}",
             self.task_id,

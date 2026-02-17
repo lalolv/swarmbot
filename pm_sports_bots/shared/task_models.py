@@ -3,11 +3,11 @@
 import json
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any, Optional
 
 
-class TaskState(str, Enum):
+class TaskState(StrEnum):
     """任务状态枚举"""
 
     PENDING = "pending"        # 等待启动

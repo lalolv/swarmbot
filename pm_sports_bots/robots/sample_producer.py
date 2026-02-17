@@ -10,11 +10,11 @@ from __future__ import annotations
 
 import random
 from datetime import datetime
-from typing import Any
-
 from loguru import logger
 
-from .base import BaseRobot, Signal
+from pm_sports_bots.shared.channels import SignalType, StreamName
+
+from .base import BaseRobot
 
 
 class SampleProducer(BaseRobot):
@@ -25,8 +25,7 @@ class SampleProducer(BaseRobot):
     """
 
     robot_type = "sample_producer"
-    input_streams: list[str] = []        # 轮询型无输入
-    output_streams: list[str] = ["data"] # 🔧 自定义点: 修改输出 stream
+    output_streams: list[StreamName] = [StreamName.DATA]  # 🔧 自定义点: 修改输出 stream
 
     @property
     def tick_interval(self) -> float:
@@ -37,10 +36,6 @@ class SampleProducer(BaseRobot):
         """初始化资源。"""
         # 🔧 自定义点: 初始化外部连接、API 客户端等
         logger.info("SampleProducer 初始化完成: task={}", self.task_id)
-
-    async def on_signal(self, stream: str, signal: Signal) -> None:
-        """轮询型机器人不处理输入信号。"""
-        return
 
     async def on_tick(self) -> None:
         """定时产生数据。"""
@@ -54,7 +49,7 @@ class SampleProducer(BaseRobot):
             "max_value": max_value,
             "timestamp": datetime.utcnow().isoformat() + "Z",
         }
-        await self.emit("data", "data_update", data)
+        await self.emit(StreamName.DATA, SignalType.DATA_UPDATE, data)
         logger.debug(
             "SampleProducer 已发送随机数信号: task={} value={}",
             self.task_id,
