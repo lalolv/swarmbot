@@ -105,10 +105,23 @@ class BaseRobot(ABC):
 
     每个机器人都可以同时接收信号和发出信号。
     通过 input_streams / output_streams 声明订阅和发布的 stream。
-    通过 on_signal() 处理输入信号，通过 on_tick() 执行定时逻辑。
-    两者可自由组合，不互斥。
 
     生命周期：__init__ → start() → run_loop() → stop()
+
+    定时/并发逻辑由各机器人在 setup() 中用标准 asyncio 自行管理，
+    在 teardown() 中负责清理：
+
+        async def setup(self) -> None:
+            self._loop_task = asyncio.create_task(self._my_loop())
+
+        async def teardown(self) -> None:
+            self._loop_task.cancel()
+            await asyncio.gather(self._loop_task, return_exceptions=True)
+
+        async def _my_loop(self) -> None:
+            while not self._cancelled:
+                await self.do_something()
+                await asyncio.sleep(5.0)
     """
 
     def __init__(
@@ -136,7 +149,7 @@ class BaseRobot(ABC):
 
     @abstractmethod
     async def setup(self) -> None:
-        """初始化资源（连接外部服务、验证配置等）。"""
+        """初始化资源（连接外部服务、启动子任务等）。"""
 
     # ========== 子类声明（覆盖类变量即可） ==========
 
@@ -151,16 +164,8 @@ class BaseRobot(ABC):
     async def on_signal(self, stream: str, signal: Signal) -> None:
         """处理输入信号。有 input_streams 时应覆盖此方法。"""
 
-    async def on_tick(self) -> None:
-        """定时回调（仅当 tick_interval 不为 None 时触发）。"""
-
     async def teardown(self) -> None:
         """清理资源（关闭连接、释放锁等）。"""
-
-    @property
-    def tick_interval(self) -> float | None:
-        """轮询间隔（秒）。None 表示不启用定时回调。"""
-        return None
 
     def get_runtime_metrics(self) -> dict[str, Any]:
         """返回机器人自定义运行指标（会随 robot_status 一起发送到前端）。"""
@@ -176,7 +181,11 @@ class BaseRobot(ABC):
 
         try:
             await self.setup()
-            await self.emit(StreamName.CONTROL, SignalType.ROBOT_START, {"robot_type": self.robot_type})
+            await self.emit(
+                StreamName.CONTROL,
+                SignalType.ROBOT_START,
+                {"robot_type": self.robot_type},
+            )
         except Exception as exc:
             self._state = RobotState.ERROR
             self._last_error = str(exc)
@@ -206,9 +215,14 @@ class BaseRobot(ABC):
             await self.teardown()
         except Exception as exc:
             logger.warning("Robot {} teardown 异常: {}", self.robot_type, exc)
+
         self._state = RobotState.STOPPED
         try:
-            await self.emit(StreamName.CONTROL, SignalType.ROBOT_STOP, {"robot_type": self.robot_type})
+            await self.emit(
+                StreamName.CONTROL,
+                SignalType.ROBOT_STOP,
+                {"robot_type": self.robot_type},
+            )
         except Exception:
             pass
         logger.info("Robot 已停止: type={} task={}", self.robot_type, self.task_id)
@@ -216,35 +230,24 @@ class BaseRobot(ABC):
     async def run_loop(self) -> None:
         """主运行循环。
 
-        核心模式: xread 阻塞读取 + tick 定时回调
-        - 有 input_streams 时: xread 阻塞等待新消息，超时后执行 tick
-        - 无 input_streams 时: 仅依赖 tick_interval 定时执行 on_tick()
+        只负责消费 input_streams：持续 xread → on_signal。
+        无 input_streams 的机器人（纯 Producer）依靠 setup() 中启动的异步任务驱动，
+        run_loop 仅保持生命周期存活直到收到取消信号。
         """
         if self._state != RobotState.RUNNING:
             await self.start()
 
         stream_keys = [self._stream_key(name) for name in self.input_streams]
         last_ids: dict[str, str] = {key: "$" for key in stream_keys}
-        tick_iv = self.tick_interval
 
         try:
             while not self._cancelled:
-                # 定时回调
-                if tick_iv is not None:
-                    try:
-                        await self.on_tick()
-                    except Exception as exc:
-                        logger.warning("Robot {} on_tick 异常: {}", self.robot_type, exc)
-                        self._last_error = str(exc)
-
-                # 读取输入 Streams
                 if stream_keys:
-                    block_ms = int((tick_iv or 1.0) * 1000)
                     try:
                         results = await self.redis.xread(
                             streams=last_ids,
                             count=100,
-                            block=block_ms,
+                            block=1000,  # 固定 1s 超时，保证取消响应及时
                         )
                     except Exception as exc:
                         logger.warning("Robot {} xread 异常: {}", self.robot_type, exc)
@@ -281,8 +284,9 @@ class BaseRobot(ABC):
                                     },
                                 )
                 else:
-                    # 无输入流时，仅按 tick_interval 休眠
-                    await asyncio.sleep(tick_iv or 1.0)
+                    # 无 input_streams：等待取消信号，实际工作由机器人自身的异步任务驱动
+                    await asyncio.sleep(1.0)
+
         except asyncio.CancelledError:
             pass
         except Exception as exc:
