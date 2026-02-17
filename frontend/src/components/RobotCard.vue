@@ -3,6 +3,7 @@ import { computed, ref } from "vue";
 import RobotAvatar from "./RobotAvatar.vue";
 import { Card } from "@/components/ui/card";
 import type { RobotState } from "@/stores/observability";
+import { useThemeStore } from "@/stores/theme";
 
 interface RobotWithPosition extends RobotState {
   position: { x: number; y: number };
@@ -17,14 +18,14 @@ const emit = defineEmits<{
   move: [dx: number, dy: number];
 }>();
 
-// --- 色板 ---
-const NEON_PALETTE = [
-  { name: "cyan", color: "#00f0ff" },
-  { name: "purple", color: "#b829ff" },
-  { name: "pink", color: "#ff2d95" },
-  { name: "green", color: "#00ff88" },
-  { name: "orange", color: "#ff6b35" },
-  { name: "yellow", color: "#ffee00" },
+// --- 色板（通过 CSS 变量适配明暗主题） ---
+const PALETTE_VARS = [
+  "--theme-robot-cyan",
+  "--theme-robot-purple",
+  "--theme-robot-pink",
+  "--theme-robot-green",
+  "--theme-robot-orange",
+  "--theme-robot-yellow",
 ];
 
 function hashString(str: string): number {
@@ -35,9 +36,19 @@ function hashString(str: string): number {
   return Math.abs(hash);
 }
 
+const themeStore = useThemeStore();
+
+const colorVar = computed(() => {
+  const idx = hashString(props.robot.robot_type) % PALETTE_VARS.length;
+  return PALETTE_VARS[idx];
+});
+
 const colorHex = computed(() => {
-  const idx = hashString(props.robot.robot_type) % NEON_PALETTE.length;
-  return NEON_PALETTE[idx].color;
+  // 依赖 themeStore.current 使主题切换时自动重新计算
+  void themeStore.current;
+  return getComputedStyle(document.documentElement)
+    .getPropertyValue(colorVar.value)
+    .trim();
 });
 
 // --- 拖拽 ---

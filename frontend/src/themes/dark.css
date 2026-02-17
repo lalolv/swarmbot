@@ -20,5 +20,14 @@
   --theme-shadow-card: 4px 4px 0px #00f0ff;
   --theme-shadow-card-hover: 6px 6px 0px #00f0ff;
   --theme-grid: rgba(0, 240, 255, 0.06);
+
+  /* Robot palette — 暗黑主题用霓虹高亮色，深底上发光 */
+  --theme-robot-cyan: #22d3ee;
+  --theme-robot-purple: #a78bfa;
+  --theme-robot-pink: #f472b6;
+  --theme-robot-green: #34d399;
+  --theme-robot-orange: #fb923c;
+  --theme-robot-yellow: #facc15;
+
   color-scheme: dark;
 }
