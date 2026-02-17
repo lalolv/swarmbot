@@ -31,9 +31,7 @@ export interface CreateTaskPayload {
   task_id?: string;
   user_id: string;
   robots: string[];
-  custom_config: {
-    poll_interval: number;
-  };
+  custom_config: Record<string, unknown>;
 }
 
 export interface CreateTaskResponse {

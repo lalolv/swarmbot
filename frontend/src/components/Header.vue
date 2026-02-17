@@ -31,7 +31,6 @@ const creating = ref(false);
 const createForm = reactive({
   taskId: "",
   userId: "",
-  pollInterval: 2,
   selectedRobots: [] as string[],
 });
 
@@ -278,23 +277,6 @@ async function deleteTask() {
         </div>
 
         <div>
-          <label class="block text-xs font-display font-semibold text-muted-foreground mb-2 uppercase tracking-wider">
-            轮询间隔 (秒)
-          </label>
-          <div class="flex items-center gap-4">
-            <input
-              v-model.number="createForm.pollInterval"
-              type="range"
-              min="0.2"
-              max="10"
-              step="0.1"
-              class="flex-1 h-2 rounded-(--theme-radius) appearance-none cursor-pointer bg-muted accent-primary"
-            />
-            <span class="w-16 text-right font-mono text-sm font-bold text-primary">{{ createForm.pollInterval }}s</span>
-          </div>
-        </div>
-
-        <div>
           <label class="block text-xs font-display font-semibold text-muted-foreground mb-3 uppercase tracking-wider">
             选择机器人 <span class="text-destructive">*</span>
           </label>
@@ -324,7 +306,7 @@ async function deleteTask() {
         <Button
           @click="submitCreate"
           :disabled="creating || createForm.selectedRobots.length === 0"
-          :class="{ 'opacity-50 cursor-not-allowed': creating || createForm.selectedRobots.length === 0 }"
+          class="disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <svg v-if="creating" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
