@@ -76,7 +76,7 @@ class RobotTask:
 
         try:
             await self._compose_and_start()
-            robot_status_task = asyncio.create_task(self._publish_robot_status_loop())
+            robot_status_task = asyncio.create_task(self._heartbeat_loop())
 
             # 🔧 自定义点: 启动业务特定的监控任务
             # monitor_task = asyncio.create_task(self._monitor_business_stream(status))
@@ -126,23 +126,30 @@ class RobotTask:
                 },
             )
 
+    async def _robot_status_callback(self, status: dict[str, Any]) -> None:
+        """机器人状态变更时立即广播（事件驱动，由 BaseRobot 直接调用）。"""
+        await self._emit_control("robot_status", status)
+
     async def _compose_and_start(self) -> None:
         """创建并启动机器人。"""
         async with self._config_lock:
             cfg = copy.deepcopy(self.config)
-        self._composer.compose(self.task_id, cfg)
+        self._composer.compose(self.task_id, cfg, status_callback=self._robot_status_callback)
         await self._composer.start_all(self.task_id)
 
-    async def _publish_robot_status_loop(self) -> None:
-        """定时发布机器人状态快照，供前端展示。"""
+    async def _heartbeat_loop(self) -> None:
+        """低频心跳（30s），仅用于确认机器人存活，不承担状态变更通知职责。"""
         while not self._stop_event.is_set():
+            await asyncio.sleep(30.0)
+            if self._stop_event.is_set():
+                break
             robots = self._composer.get_robots(self.task_id)
             for robot in robots:
                 status = robot.get_status().to_dict()
                 status.update(robot.get_runtime_metrics())
                 status["timestamp"] = _now_iso()
+                status["heartbeat"] = True
                 await self._emit_control("robot_status", status)
-            await asyncio.sleep(2.0)
 
     async def _save_status(self, status: TaskStatus) -> None:
         """持久化任务状态。"""

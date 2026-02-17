@@ -9,7 +9,7 @@ from loguru import logger
 
 from pm_sports_bots.shared import RedisClient, TaskConfig
 
-from .base import BaseRobot
+from .base import BaseRobot, StatusCallback
 from .sample_producer import SampleProducer
 from .sample_consumer import SampleConsumer
 
@@ -34,7 +34,12 @@ class TaskComposer:
     def available_robot_types(cls) -> list[str]:
         return sorted(cls.ROBOT_REGISTRY.keys())
 
-    def compose(self, task_id: str, config: TaskConfig) -> list[BaseRobot]:
+    def compose(
+        self,
+        task_id: str,
+        config: TaskConfig,
+        status_callback: StatusCallback | None = None,
+    ) -> list[BaseRobot]:
         """根据配置创建任务对应的机器人列表。
 
         # 🔧 自定义点: 添加条件创建逻辑
@@ -46,8 +51,8 @@ class TaskComposer:
         robots: list[BaseRobot] = []
         if configured_robots is None:
             robots = [
-                SampleProducer(task_id, self.redis, cfg),
-                SampleConsumer(task_id, self.redis, cfg),
+                SampleProducer(task_id, self.redis, cfg, status_callback),
+                SampleConsumer(task_id, self.redis, cfg, status_callback),
             ]
         else:
             if not isinstance(configured_robots, list):
@@ -65,7 +70,7 @@ class TaskComposer:
 
                 merged_config = dict(cfg)
                 merged_config.update(robot_config)
-                robots.append(robot_cls(task_id, self.redis, merged_config))
+                robots.append(robot_cls(task_id, self.redis, merged_config, status_callback))
 
             if not robots:
                 raise ValueError("No robots are enabled for this task")

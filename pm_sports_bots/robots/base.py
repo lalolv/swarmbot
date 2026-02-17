@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -14,6 +15,9 @@ from loguru import logger
 
 from pm_sports_bots.shared import Channels, RedisClient
 from pm_sports_bots.shared.channels import SignalType, StreamName
+
+# 状态广播回调类型：接收状态字典，无返回值
+StatusCallback = Callable[[dict[str, Any]], Coroutine[Any, Any, None]]
 
 
 class RobotState(StrEnum):
@@ -129,6 +133,7 @@ class BaseRobot(ABC):
         task_id: str,
         redis: RedisClient,
         config: dict[str, Any] | None = None,
+        status_callback: StatusCallback | None = None,
     ):
         self.task_id = task_id
         self.redis = redis
@@ -139,6 +144,7 @@ class BaseRobot(ABC):
         self._last_error: str | None = None
         self._started_at: str | None = None
         self._cancelled = False
+        self._status_callback = status_callback
 
     # ========== 抽象属性/方法（子类必须实现） ==========
 
@@ -186,10 +192,13 @@ class BaseRobot(ABC):
                 SignalType.ROBOT_START,
                 {"robot_type": self.robot_type},
             )
+            # emit() 已递增 signals_out 并触发广播，无需额外调用
         except Exception as exc:
             self._state = RobotState.ERROR
             self._last_error = str(exc)
             logger.error("Robot {} setup 失败: {}", self.robot_type, exc)
+            # 先广播 ERROR 状态，再尝试发控制信号（发送失败也不影响广播）
+            await self._broadcast_status()
             try:
                 await self.emit(StreamName.CONTROL, SignalType.ROBOT_ERROR, {
                     "robot_type": self.robot_type,
@@ -217,6 +226,8 @@ class BaseRobot(ABC):
             logger.warning("Robot {} teardown 异常: {}", self.robot_type, exc)
 
         self._state = RobotState.STOPPED
+        # 状态已确定，立即广播再发控制信号
+        await self._broadcast_status()
         try:
             await self.emit(
                 StreamName.CONTROL,
@@ -261,8 +272,11 @@ class BaseRobot(ABC):
                             last_ids[stream_key] = msg_id
                             signal = Signal.from_fields(msg_id, fields)
                             self._signals_in += 1
+                            # signals_in 变更 → 立即广播
+                            await self._broadcast_status()
                             try:
                                 await self.on_signal(stream_name, signal)
+                                # on_signal 内部调用 emit() 时已触发广播，无需重复
                             except Exception as exc:
                                 logger.warning(
                                     "Robot {} on_signal 异常: stream={} id={} err={}",
@@ -272,6 +286,8 @@ class BaseRobot(ABC):
                                     exc,
                                 )
                                 self._last_error = str(exc)
+                                # 先广播错误状态，再发控制信号
+                                await self._broadcast_status()
                                 await self.emit(
                                     StreamName.CONTROL,
                                     SignalType.ROBOT_ERROR,
@@ -293,6 +309,7 @@ class BaseRobot(ABC):
             self._state = RobotState.ERROR
             self._last_error = str(exc)
             logger.error("Robot {} run_loop 异常: {}", self.robot_type, exc)
+            await self._broadcast_status()
             try:
                 await self.emit(StreamName.CONTROL, SignalType.ROBOT_ERROR, {
                     "robot_type": self.robot_type,
@@ -328,6 +345,8 @@ class BaseRobot(ABC):
             maxlen=maxlen,
         )
         self._signals_out += 1
+        # signals_out 变更 → 立即广播（包含最新状态和 runtime metrics）
+        await self._broadcast_status()
         return msg_id
 
     # ========== 状态查询 ==========
@@ -344,6 +363,18 @@ class BaseRobot(ABC):
             started_at=self._started_at,
             updated_at=_now_iso(),
         )
+
+    async def _broadcast_status(self) -> None:
+        """将当前状态快照推送给回调方（事件驱动，无回调则静默忽略）。"""
+        if self._status_callback is None:
+            return
+        try:
+            status = self.get_status().to_dict()
+            status.update(self.get_runtime_metrics())
+            status["timestamp"] = _now_iso()
+            await self._status_callback(status)
+        except Exception as exc:
+            logger.warning("Robot {} 状态广播失败: {}", self.robot_type, exc)
 
     # ========== 内部方法 ==========
 
