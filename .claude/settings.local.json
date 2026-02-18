@@ -15,7 +15,10 @@
       "Bash(do sed -i '' 's/rounded-\\\\[var\\(--theme-radius\\)\\\\]/rounded-\\(--theme-radius\\)/g; s/border-\\\\[length:var\\(--theme-border-width\\)\\\\]/border-\\(length:--theme-border-width\\)/g' \"$f\")",
       "Bash(done)",
       "Bash(uv run python:*)",
-      "Bash(uv run ruff check:*)"
+      "Bash(uv run ruff check:*)",
+      "Bash(__NEW_LINE_f01e1b92ff2cd439__ echo \"\")",
+      "Bash(python3:*)",
+      "Bash(SKILL_DIR=\"/Volumes/UWorks/Projects/Aixtrade/pm-sports-bots/.claude/skills/create-vue-frontend\":*)"
     ]
   }
 }
