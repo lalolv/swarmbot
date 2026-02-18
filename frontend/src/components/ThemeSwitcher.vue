@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, ref } from "vue";
 
 import { useTheme } from "@/composables/useTheme";
+import { DropdownPopover } from "@/components/ui/dropdown";
 import type { ColorMode, ThemeName } from "@/themes";
 
 const props = withDefaults(
@@ -16,7 +17,6 @@ const props = withDefaults(
 const { mode, themeName, themes, setMode, setTheme } = useTheme();
 
 const panelOpen = ref(false);
-const rootRef = ref<HTMLElement | null>(null);
 
 const colorOptions: { value: ColorMode; title: string; shortLabel: string }[] = [
   { value: "light", title: "亮色模式", shortLabel: "亮" },
@@ -28,60 +28,46 @@ const activeThemeLabel = computed(() => {
   return themes.find((item) => item.name === themeName.value)?.label ?? themeName.value;
 });
 
-function selectTheme(name: ThemeName) {
+function selectTheme(name: ThemeName, close?: (restoreFocus?: boolean) => void) {
   setTheme(name);
-  if (props.compact) {
-    panelOpen.value = false;
+  if (props.compact && close) {
+    close();
   }
 }
 
 function selectMode(nextMode: ColorMode) {
   setMode(nextMode);
 }
-
-function handleClickOutside(event: MouseEvent) {
-  if (!props.compact || !panelOpen.value || !rootRef.value) {
-    return;
-  }
-
-  const target = event.target;
-  if (target instanceof Node && !rootRef.value.contains(target)) {
-    panelOpen.value = false;
-  }
-}
-
-onMounted(() => {
-  document.addEventListener("mousedown", handleClickOutside);
-});
-
-onBeforeUnmount(() => {
-  document.removeEventListener("mousedown", handleClickOutside);
-});
 </script>
 
 <template>
-  <div v-if="compact" ref="rootRef" class="relative">
-    <button
-      type="button"
-      class="h-10 px-3 sm:px-3.5 inline-flex items-center gap-2 border-(length:--theme-border-width) border-border rounded-(--theme-radius) bg-surface text-foreground shadow-card hover:-translate-y-0.5 hover:shadow-card-hover active:translate-y-0 transition-all"
-      :aria-expanded="panelOpen"
-      aria-haspopup="true"
-      @click="panelOpen = !panelOpen"
-    >
-      <svg class="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M12 3c1.8 0 3.5.8 4.6 2.1 1.8.1 3.4 1.3 4 3 .6 1.7.2 3.6-1 4.9.3 1.8-.4 3.6-1.9 4.8-1.4 1.1-3.4 1.3-5 .5-1.6.8-3.6.6-5-.5-1.5-1.2-2.2-3-1.9-4.8-1.2-1.3-1.6-3.2-1-4.9.6-1.7 2.2-2.9 4-3C8.5 3.8 10.2 3 12 3z" />
-        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6M12 9v6" />
-      </svg>
-      <span class="hidden md:inline text-xs font-display font-semibold">{{ activeThemeLabel }}</span>
-      <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-180': panelOpen }" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-      </svg>
-    </button>
+  <DropdownPopover
+    v-if="compact"
+    v-model:open="panelOpen"
+    panel-id="theme-control-panel"
+    panel-class="absolute right-0 top-full mt-2 w-[280px] bg-card border-(length:--theme-border-width) border-border rounded-(--theme-radius) shadow-card-hover overflow-hidden animate-slide-down z-50"
+  >
+    <template #trigger="{ open, toggle }">
+      <button
+        type="button"
+        class="h-8 px-3 inline-flex items-center gap-2 text-xs font-display font-semibold border-(length:--theme-border-width) border-border rounded-(--theme-radius) bg-surface text-foreground shadow-card hover:-translate-y-0.5 hover:shadow-card-hover active:translate-y-0 transition-all"
+        :aria-expanded="open"
+        aria-controls="theme-control-panel"
+        aria-haspopup="true"
+        @click="toggle"
+      >
+        <svg class="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 3c1.8 0 3.5.8 4.6 2.1 1.8.1 3.4 1.3 4 3 .6 1.7.2 3.6-1 4.9.3 1.8-.4 3.6-1.9 4.8-1.4 1.1-3.4 1.3-5 .5-1.6.8-3.6.6-5-.5-1.5-1.2-2.2-3-1.9-4.8-1.2-1.3-1.6-3.2-1-4.9.6-1.7 2.2-2.9 4-3C8.5 3.8 10.2 3 12 3z" />
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6M12 9v6" />
+        </svg>
+        <span class="hidden md:inline text-xs font-display font-semibold">{{ activeThemeLabel }}</span>
+        <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-180': open }" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+    </template>
 
-    <div
-      v-if="panelOpen"
-      class="absolute right-0 top-full mt-2 w-[280px] bg-card border-(length:--theme-border-width) border-border rounded-(--theme-radius) shadow-card-hover overflow-hidden animate-slide-down z-50"
-    >
+    <template #default="{ close }">
       <div class="px-3 py-2 border-b border-border bg-muted/40">
         <p class="text-[10px] font-mono uppercase tracking-[0.18em] text-muted-foreground">Theme Control</p>
       </div>
@@ -96,7 +82,7 @@ onBeforeUnmount(() => {
               type="button"
               class="w-full h-9 px-2.5 text-xs font-display font-semibold border-(length:--theme-border-width) border-border rounded-(--theme-radius) transition-all flex items-center justify-between"
               :class="themeName === t.name ? 'bg-primary text-primary-foreground shadow-card' : 'bg-surface text-foreground hover:bg-muted'"
-              @click="selectTheme(t.name as ThemeName)"
+              @click="selectTheme(t.name as ThemeName, close)"
             >
               <span>{{ t.label }}</span>
               <span v-if="themeName === t.name" class="text-[10px] opacity-85">当前</span>
@@ -127,8 +113,8 @@ onBeforeUnmount(() => {
           </div>
         </div>
       </div>
-    </div>
-  </div>
+    </template>
+  </DropdownPopover>
 
   <div v-else class="flex flex-col gap-3">
     <div v-if="themes.length > 1" class="flex flex-col gap-1.5">

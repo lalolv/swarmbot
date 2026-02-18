@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogHeader, DialogFooter } from "@/components/ui/dialog";
+import { DropdownPopover } from "@/components/ui/dropdown";
 import ThemeSwitcher from "@/components/ThemeSwitcher.vue";
 import type { TaskItem } from "@/api/client";
 
@@ -167,25 +168,27 @@ async function deleteTask() {
         </Button>
 
         <!-- Task List Dropdown -->
-        <div class="relative">
-          <Button variant="outline" size="sm" @click="showTaskList = !showTaskList">
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-            </svg>
-            <span class="hidden md:inline max-w-[120px] truncate">
-              {{ currentTaskId || '选择任务' }}
-            </span>
-            <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-180': showTaskList }" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-            </svg>
-          </Button>
+        <DropdownPopover
+          v-model:open="showTaskList"
+          panel-id="task-list-panel"
+          panel-class="absolute top-full right-0 mt-2 w-72 bg-card border-(length:--theme-border-width) border-border rounded-(--theme-radius) shadow-card-hover overflow-hidden animate-slide-down"
+        >
+          <template #trigger="{ open, toggle }">
+            <Button variant="outline" size="sm" :aria-expanded="open" aria-controls="task-list-panel" aria-haspopup="true" @click="toggle">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+              <span class="hidden md:inline max-w-[120px] truncate">
+                {{ currentTaskId || '选择任务' }}
+              </span>
+              <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-180': open }" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </Button>
+          </template>
 
-          <!-- Task List Dropdown Menu -->
-          <div
-            v-if="showTaskList"
-            class="absolute top-full right-0 mt-2 w-72 bg-card border-(length:--theme-border-width) border-border rounded-(--theme-radius) shadow-card-hover overflow-hidden animate-slide-down"
-          >
+          <template #default="{ close }">
             <div class="p-3 border-b border-border flex items-center justify-between">
               <span class="text-xs font-display font-semibold text-muted-foreground uppercase tracking-wider">任务列表</span>
               <button @click="$emit('refresh-tasks')" class="text-xs font-semibold text-primary hover:underline">
@@ -199,7 +202,7 @@ async function deleteTask() {
               <button
                 v-for="task in tasks"
                 :key="task.task_id"
-                @click="selectTask(task.task_id)"
+                @click="selectTask(task.task_id); close(false)"
                 class="w-full px-4 py-3 text-left hover:bg-muted transition-colors flex items-center gap-3"
                 :class="{ 'bg-primary/10': task.task_id === currentTaskId }"
               >
@@ -213,8 +216,8 @@ async function deleteTask() {
                 </svg>
               </button>
             </div>
-          </div>
-        </div>
+          </template>
+        </DropdownPopover>
 
         <!-- Subscribe Toggle -->
         <Button
