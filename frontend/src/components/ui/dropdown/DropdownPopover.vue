@@ -10,6 +10,7 @@ const props = withDefaults(
     panelId?: string;
     panelClass?: string;
     placement?: "bottom-start" | "bottom-end";
+    offset?: "none" | "sm" | "md" | "lg";
     autoFocusFirst?: boolean;
     closeOnOutside?: boolean;
     closeOnEscape?: boolean;
@@ -19,6 +20,7 @@ const props = withDefaults(
     panelId: undefined,
     panelClass: "",
     placement: "bottom-end",
+    offset: "md",
     autoFocusFirst: true,
     closeOnOutside: true,
     closeOnEscape: true,
@@ -30,11 +32,24 @@ const rootRef = ref<HTMLElement | null>(null);
 const panelRef = ref<HTMLElement | null>(null);
 const triggerRef = ref<HTMLElement | null>(null);
 
+const panelOffsetClass = computed(() => {
+  if (props.offset === "none") {
+    return "mt-0";
+  }
+  if (props.offset === "sm") {
+    return "mt-1.5";
+  }
+  if (props.offset === "lg") {
+    return "mt-3";
+  }
+  return "mt-2";
+});
+
 const panelPlacementClass = computed(() => {
   if (props.placement === "bottom-start") {
-    return "absolute left-0 top-full mt-2";
+    return "absolute left-0 top-full";
   }
-  return "absolute right-0 top-full mt-2";
+  return "absolute right-0 top-full";
 });
 
 function close(restoreFocus = props.restoreFocus) {
@@ -107,7 +122,7 @@ onBeforeUnmount(() => {
       :id="panelId"
       ref="panelRef"
       tabindex="-1"
-      :class="cn(panelPlacementClass, panelClass)"
+      :class="cn(panelPlacementClass, panelOffsetClass, panelClass)"
     >
       <slot :open="open" :close="close" />
     </div>

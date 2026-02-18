@@ -172,6 +172,7 @@ async function deleteTask() {
           v-model:open="showTaskList"
           panel-id="task-list-panel"
           placement="bottom-end"
+          offset="md"
           panel-class="w-72 bg-card border-(length:--theme-border-width) border-border rounded-(--theme-radius) shadow-card-hover overflow-hidden animate-slide-down"
         >
           <template #trigger="{ open, toggle }">
