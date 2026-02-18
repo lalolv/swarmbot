@@ -1,5 +1,5 @@
 // 主题名称（扩展时在此添加新名称）
-export type ThemeName = "neobrutalism";
+export type ThemeName = "neobrutalism" | "ai-native";
 
 // 用户可选择的色彩模式：亮色 / 暗色 / 跟随系统
 export type ColorMode = "light" | "dark" | "system";
@@ -14,6 +14,7 @@ export interface ThemeDefinition {
 
 export const THEMES: ThemeDefinition[] = [
   { name: "neobrutalism", label: "Neo Brutalism" },
+  { name: "ai-native", label: "AI Native" },
 ];
 
 export const DEFAULT_THEME: ThemeName = "neobrutalism";

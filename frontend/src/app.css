@@ -2,6 +2,7 @@
 
 @import "tailwindcss";
 @import "./themes/neobrutalism.css";
+@import "./themes/ai-native.css";
 
 @theme {
   /* 语义色 — 从 CSS 变量映射 */
