@@ -24,8 +24,10 @@ PLACEHOLDER_PATTERNS = [
     r"\{ConsumerClassName\}",
     r"\{PRIMARY_STREAM\}",
     r"\{SECONDARY_STREAM\}",
-    r"\{STREAM_CONSTANTS\}",
-    r"\{ALL_STREAMS_ITEMS\}",
+    r"\{PRIMARY_STREAM_UPPER\}",
+    r"\{SECONDARY_STREAM_UPPER\}",
+    r"\{STREAM_ENUM_MEMBERS\}",
+    r"\{STREAM_CONST_REFS\}",
 ]
 
 REQUIRED_FILES = [

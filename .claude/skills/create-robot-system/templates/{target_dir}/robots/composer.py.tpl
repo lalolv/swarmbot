@@ -9,7 +9,7 @@ from loguru import logger
 
 from {package_name}.shared import RedisClient, TaskConfig
 
-from .base import BaseRobot
+from .base import BaseRobot, StatusCallback
 from .{producer_name} import {ProducerClassName}
 from .{consumer_name} import {ConsumerClassName}
 
@@ -34,7 +34,12 @@ class TaskComposer:
     def available_robot_types(cls) -> list[str]:
         return sorted(cls.ROBOT_REGISTRY.keys())
 
-    def compose(self, task_id: str, config: TaskConfig) -> list[BaseRobot]:
+    def compose(
+        self,
+        task_id: str,
+        config: TaskConfig,
+        status_callback: StatusCallback | None = None,
+    ) -> list[BaseRobot]:
         """根据配置创建任务对应的机器人列表。
 
         # 🔧 自定义点: 添加条件创建逻辑
@@ -46,8 +51,8 @@ class TaskComposer:
         robots: list[BaseRobot] = []
         if configured_robots is None:
             robots = [
-                {ProducerClassName}(task_id, self.redis, cfg),
-                {ConsumerClassName}(task_id, self.redis, cfg),
+                {ProducerClassName}(task_id, self.redis, cfg, status_callback),
+                {ConsumerClassName}(task_id, self.redis, cfg, status_callback),
             ]
         else:
             if not isinstance(configured_robots, list):
@@ -65,7 +70,7 @@ class TaskComposer:
 
                 merged_config = dict(cfg)
                 merged_config.update(robot_config)
-                robots.append(robot_cls(task_id, self.redis, merged_config))
+                robots.append(robot_cls(task_id, self.redis, merged_config, status_callback))
 
             if not robots:
                 raise ValueError("No robots are enabled for this task")

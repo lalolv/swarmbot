@@ -37,8 +37,9 @@ def snake_to_pascal(value: str) -> str:
     return "".join(part.capitalize() for part in value.split("_") if part)
 
 
-def stream_to_const_name(stream_name: str) -> str:
-    return "STREAM_" + stream_name.upper()
+def stream_to_enum_member(stream_name: str) -> str:
+    """将 stream 名转换为枚举成员名（大写）。"""
+    return stream_name.upper()
 
 
 def parse_streams(raw: str) -> list[str]:
@@ -84,9 +85,18 @@ def render_text(content: str, replacements: dict[str, str]) -> str:
 
 
 def build_stream_blocks(streams: list[str]) -> tuple[str, str]:
-    const_lines = [f'    {stream_to_const_name(name)} = "{name}"' for name in streams]
-    list_lines = [f"        {stream_to_const_name(name)}," for name in streams]
-    return "\n".join(const_lines), "\n".join(list_lines)
+    """生成 StreamName 枚举成员和 Channels 常量引用。
+
+    返回：
+        enum_members  — 插入 StreamName(StrEnum) 类体的成员行（4 空格缩进）
+        const_refs    — 插入 Channels 类体的常量引用行（4 空格缩进）
+    """
+    enum_lines = [f'    {stream_to_enum_member(name)} = "{name}"' for name in streams]
+    ref_lines = [
+        f"    STREAM_{stream_to_enum_member(name)} = StreamName.{stream_to_enum_member(name)}"
+        for name in streams
+    ]
+    return "\n".join(enum_lines), "\n".join(ref_lines)
 
 
 def main() -> int:
@@ -117,7 +127,7 @@ def main() -> int:
     consumer_class = snake_to_pascal(args.consumer_name)
     primary_stream = streams[0]
     secondary_stream = streams[1] if len(streams) > 1 else streams[0]
-    stream_constants, all_stream_items = build_stream_blocks(streams)
+    stream_enum_members, stream_const_refs = build_stream_blocks(streams)
 
     replacements = {
         "package_name": args.package_name,
@@ -129,8 +139,10 @@ def main() -> int:
         "ConsumerClassName": consumer_class,
         "PRIMARY_STREAM": primary_stream,
         "SECONDARY_STREAM": secondary_stream,
-        "STREAM_CONSTANTS": stream_constants,
-        "ALL_STREAMS_ITEMS": all_stream_items,
+        "PRIMARY_STREAM_UPPER": stream_to_enum_member(primary_stream),
+        "SECONDARY_STREAM_UPPER": stream_to_enum_member(secondary_stream),
+        "STREAM_ENUM_MEMBERS": stream_enum_members,
+        "STREAM_CONST_REFS": stream_const_refs,
     }
 
     generated: list[Path] = []

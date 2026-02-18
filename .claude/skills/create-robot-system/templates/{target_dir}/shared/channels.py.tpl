@@ -1,5 +1,32 @@
 """Redis Channel 命名规范"""
 
+from enum import StrEnum
+
+
+class StreamName(StrEnum):
+    """所有业务 Stream 的统一定义。
+
+    新增 Stream 时只需在此处添加枚举值，ALL_STREAMS 会自动更新。
+    """
+
+{STREAM_ENUM_MEMBERS}
+
+
+class SignalType(StrEnum):
+    """所有信号类型的统一定义。
+
+    系统控制信号和业务信号统一管理，避免裸字符串拼写错误。
+    """
+
+    # 系统控制信号
+    ROBOT_START = "robot_start"
+    ROBOT_STOP = "robot_stop"
+    ROBOT_ERROR = "robot_error"
+
+    # 🔧 自定义点: 添加业务信号类型
+    DATA_UPDATE = "data_update"
+    PROCESS_RESULT = "process_result"
+
 
 class Channels:
     """Redis Channel 命名工具类"""
@@ -10,14 +37,11 @@ class Channels:
     # 控制 Channel（Worker 监听）
     CONTROL = f"{PREFIX}:control"
 
-    # 🔧 自定义点: 添加业务特定的 Stream 名
-{STREAM_CONSTANTS}
+    # Stream 名常量（从枚举引用，保持向后兼容）
+{STREAM_CONST_REFS}
 
-    # 所有 Stream 列表（SSE Bridge 遍历用）
-    # 🔧 自定义点: 添加新 Stream 时务必加入此列表
-    ALL_STREAMS = [
-{ALL_STREAMS_ITEMS}
-    ]
+    # 所有 Stream 列表（SSE Bridge 遍历用，自动从枚举生成）
+    ALL_STREAMS: list[str] = [s.value for s in StreamName]
 
     @classmethod
     def task_stream(cls, task_id: str, stream_name: str) -> str:

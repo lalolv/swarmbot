@@ -7,9 +7,9 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from loguru import logger
+
+from {package_name}.shared.channels import SignalType, StreamName
 
 from .base import BaseRobot, Signal
 
@@ -18,12 +18,12 @@ class {ConsumerClassName}(BaseRobot):
     """响应型示例机器人。
 
     # 🔧 自定义点: 修改为你的业务逻辑
-    订阅 data stream，接收并处理数据信号，生成输出信号。
+    订阅 {PRIMARY_STREAM} stream，接收并处理数据信号，生成输出信号。
     """
 
     robot_type = "{consumer_name}"
-    input_streams: list[str] = ["{PRIMARY_STREAM}"]      # 🔧 自定义点: 修改订阅的 stream
-    output_streams: list[str] = ["{SECONDARY_STREAM}"]   # 🔧 自定义点: 修改输出 stream
+    input_streams: list[StreamName] = [StreamName.{PRIMARY_STREAM_UPPER}]     # 🔧 自定义点: 修改订阅的 stream
+    output_streams: list[StreamName] = [StreamName.{SECONDARY_STREAM_UPPER}]  # 🔧 自定义点: 修改输出 stream
 
     async def setup(self) -> None:
         """初始化资源。"""
@@ -36,7 +36,7 @@ class {ConsumerClassName}(BaseRobot):
         根据 signal.type 路由到不同的处理方法。
         """
         # 🔧 自定义点: 添加你的信号类型处理逻辑
-        if signal.type == "data_update":
+        if signal.type == SignalType.DATA_UPDATE:
             await self._handle_data_update(signal)
         else:
             logger.debug(
@@ -53,6 +53,7 @@ class {ConsumerClassName}(BaseRobot):
             "source_type": signal.type,
             "processed": True,
             "input_summary": str(input_data)[:100],
+            "timestamp": signal.timestamp,
         }
-        await self.emit("{SECONDARY_STREAM}", "process_result", result)
+        await self.emit(StreamName.{SECONDARY_STREAM_UPPER}, SignalType.PROCESS_RESULT, result)
         logger.debug("{ConsumerClassName} 已处理信号并发出结果: task={}", self.task_id)

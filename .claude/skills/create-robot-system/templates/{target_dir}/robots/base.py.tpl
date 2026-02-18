@@ -5,17 +5,22 @@ from __future__ import annotations
 import asyncio
 import json
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from loguru import logger
 
 from {package_name}.shared import Channels, RedisClient
+from {package_name}.shared.channels import SignalType, StreamName
+
+# 状态广播回调类型：接收状态字典，无返回值
+StatusCallback = Callable[[dict[str, Any]], Coroutine[Any, Any, None]]
 
 
-class RobotState(str, Enum):
+class RobotState(StrEnum):
     """机器人运行状态。"""
 
     IDLE = "idle"
@@ -32,7 +37,7 @@ class Signal:
     Signal 通过 Redis Streams 传输，字段值均为字符串。
     """
 
-    type: str                      # 信号类型（如 "data_update", "strategy_signal"）
+    type: str                      # 信号类型（如 "data_update", "process_result"）
     source: str                    # 发送方机器人类型
     task_id: str                   # 所属任务 ID
     timestamp: str                 # ISO 时间戳
@@ -102,11 +107,25 @@ class RobotStatus:
 class BaseRobot(ABC):
     """机器人抽象基类。
 
-    两种工作模式：
-    1. 轮询型（Producer）：无 input_streams，通过 tick_interval + on_tick() 周期性产生数据
-    2. 响应型（Consumer）：订阅 input_streams，在 on_signal() 中处理输入信号
+    每个机器人都可以同时接收信号和发出信号。
+    通过 input_streams / output_streams 声明订阅和发布的 stream。
 
     生命周期：__init__ → start() → run_loop() → stop()
+
+    定时/并发逻辑由各机器人在 setup() 中用标准 asyncio 自行管理，
+    在 teardown() 中负责清理：
+
+        async def setup(self) -> None:
+            self._loop_task = asyncio.create_task(self._my_loop())
+
+        async def teardown(self) -> None:
+            self._loop_task.cancel()
+            await asyncio.gather(self._loop_task, return_exceptions=True)
+
+        async def _my_loop(self) -> None:
+            while not self._cancelled:
+                await self.do_something()
+                await asyncio.sleep(5.0)
     """
 
     def __init__(
@@ -114,6 +133,7 @@ class BaseRobot(ABC):
         task_id: str,
         redis: RedisClient,
         config: dict[str, Any] | None = None,
+        status_callback: StatusCallback | None = None,
     ):
         self.task_id = task_id
         self.redis = redis
@@ -124,6 +144,7 @@ class BaseRobot(ABC):
         self._last_error: str | None = None
         self._started_at: str | None = None
         self._cancelled = False
+        self._status_callback = status_callback
 
     # ========== 抽象属性/方法（子类必须实现） ==========
 
@@ -132,36 +153,25 @@ class BaseRobot(ABC):
     def robot_type(self) -> str:
         """机器人类型标识。"""
 
-    @property
-    @abstractmethod
-    def input_streams(self) -> list[str]:
-        """订阅的 stream 名列表。空列表表示轮询型机器人。"""
-
-    @property
-    @abstractmethod
-    def output_streams(self) -> list[str]:
-        """发布的 stream 名列表。"""
-
     @abstractmethod
     async def setup(self) -> None:
-        """初始化资源（连接外部服务、验证配置等）。"""
+        """初始化资源（连接外部服务、启动子任务等）。"""
 
-    @abstractmethod
-    async def on_signal(self, stream: str, signal: Signal) -> None:
-        """处理输入信号。"""
+    # ========== 子类声明（覆盖类变量即可） ==========
+
+    input_streams: list[StreamName] = []
+    """订阅的 stream 名列表。空列表表示不订阅任何 stream。"""
+
+    output_streams: list[StreamName] = []
+    """发布的 stream 名列表。空列表表示不发布到任何 stream。"""
 
     # ========== 可选覆盖 ==========
 
+    async def on_signal(self, stream: str, signal: Signal) -> None:
+        """处理输入信号。有 input_streams 时应覆盖此方法。"""
+
     async def teardown(self) -> None:
         """清理资源（关闭连接、释放锁等）。"""
-
-    async def on_tick(self) -> None:
-        """定时回调（仅当 tick_interval 不为 None 时触发）。"""
-
-    @property
-    def tick_interval(self) -> float | None:
-        """轮询间隔（秒）。None 表示不启用定时回调。"""
-        return None
 
     def get_runtime_metrics(self) -> dict[str, Any]:
         """返回机器人自定义运行指标（会随 robot_status 一起发送到前端）。"""
@@ -177,13 +187,18 @@ class BaseRobot(ABC):
 
         try:
             await self.setup()
-            await self.emit(Channels.STREAM_CONTROL, "robot_start", {"robot_type": self.robot_type})
+            await self.emit(
+                Channels.STREAM_CONTROL,
+                SignalType.ROBOT_START,
+                {"robot_type": self.robot_type},
+            )
         except Exception as exc:
             self._state = RobotState.ERROR
             self._last_error = str(exc)
             logger.error("Robot {} setup 失败: {}", self.robot_type, exc)
+            await self._broadcast_status()
             try:
-                await self.emit(Channels.STREAM_CONTROL, "robot_error", {
+                await self.emit(Channels.STREAM_CONTROL, SignalType.ROBOT_ERROR, {
                     "robot_type": self.robot_type,
                     "stage": "setup",
                     "error": str(exc),
@@ -207,9 +222,15 @@ class BaseRobot(ABC):
             await self.teardown()
         except Exception as exc:
             logger.warning("Robot {} teardown 异常: {}", self.robot_type, exc)
+
         self._state = RobotState.STOPPED
+        await self._broadcast_status()
         try:
-            await self.emit(Channels.STREAM_CONTROL, "robot_stop", {"robot_type": self.robot_type})
+            await self.emit(
+                Channels.STREAM_CONTROL,
+                SignalType.ROBOT_STOP,
+                {"robot_type": self.robot_type},
+            )
         except Exception:
             pass
         logger.info("Robot 已停止: type={} task={}", self.robot_type, self.task_id)
@@ -217,35 +238,24 @@ class BaseRobot(ABC):
     async def run_loop(self) -> None:
         """主运行循环。
 
-        核心模式: xread 阻塞读取 + tick 定时回调
-        - 有 input_streams 时: xread 阻塞等待新消息，超时后执行 tick
-        - 无 input_streams 时: 仅依赖 tick_interval 定时执行 on_tick()
+        只负责消费 input_streams：持续 xread → on_signal。
+        无 input_streams 的机器人（纯 Producer）依靠 setup() 中启动的异步任务驱动，
+        run_loop 仅保持生命周期存活直到收到取消信号。
         """
         if self._state != RobotState.RUNNING:
             await self.start()
 
         stream_keys = [self._stream_key(name) for name in self.input_streams]
         last_ids: dict[str, str] = {key: "$" for key in stream_keys}
-        tick_iv = self.tick_interval
 
         try:
             while not self._cancelled:
-                # 定时回调
-                if tick_iv is not None:
-                    try:
-                        await self.on_tick()
-                    except Exception as exc:
-                        logger.warning("Robot {} on_tick 异常: {}", self.robot_type, exc)
-                        self._last_error = str(exc)
-
-                # 读取输入 Streams
                 if stream_keys:
-                    block_ms = int((tick_iv or 1.0) * 1000)
                     try:
                         results = await self.redis.xread(
                             streams=last_ids,
                             count=100,
-                            block=block_ms,
+                            block=1000,  # 固定 1s 超时，保证取消响应及时
                         )
                     except Exception as exc:
                         logger.warning("Robot {} xread 异常: {}", self.robot_type, exc)
@@ -259,6 +269,7 @@ class BaseRobot(ABC):
                             last_ids[stream_key] = msg_id
                             signal = Signal.from_fields(msg_id, fields)
                             self._signals_in += 1
+                            await self._broadcast_status()
                             try:
                                 await self.on_signal(stream_name, signal)
                             except Exception as exc:
@@ -270,9 +281,10 @@ class BaseRobot(ABC):
                                     exc,
                                 )
                                 self._last_error = str(exc)
+                                await self._broadcast_status()
                                 await self.emit(
                                     Channels.STREAM_CONTROL,
-                                    "robot_error",
+                                    SignalType.ROBOT_ERROR,
                                     {
                                         "robot_type": self.robot_type,
                                         "stage": "on_signal",
@@ -282,16 +294,18 @@ class BaseRobot(ABC):
                                     },
                                 )
                 else:
-                    # 无输入流时，仅按 tick_interval 休眠
-                    await asyncio.sleep(tick_iv or 1.0)
+                    # 无 input_streams：等待取消信号，实际工作由机器人自身的异步任务驱动
+                    await asyncio.sleep(1.0)
+
         except asyncio.CancelledError:
             pass
         except Exception as exc:
             self._state = RobotState.ERROR
             self._last_error = str(exc)
             logger.error("Robot {} run_loop 异常: {}", self.robot_type, exc)
+            await self._broadcast_status()
             try:
-                await self.emit(Channels.STREAM_CONTROL, "robot_error", {
+                await self.emit(Channels.STREAM_CONTROL, SignalType.ROBOT_ERROR, {
                     "robot_type": self.robot_type,
                     "stage": "run_loop",
                     "error": str(exc),
@@ -305,26 +319,27 @@ class BaseRobot(ABC):
 
     async def emit(
         self,
-        stream: str,
-        signal_type: str,
+        stream: StreamName | str,
+        signal_type: SignalType | str,
         data: dict[str, Any],
         *,
         maxlen: int = 1000,
     ) -> str:
         """发出信号到指定 stream。"""
         signal = Signal(
-            type=signal_type,
+            type=str(signal_type),
             source=self.robot_type,
             task_id=self.task_id,
             timestamp=_now_iso(),
             data=data,
         )
         msg_id = await self.redis.xadd(
-            self._stream_key(stream),
+            self._stream_key(str(stream)),
             signal.to_fields(),
             maxlen=maxlen,
         )
         self._signals_out += 1
+        await self._broadcast_status()
         return msg_id
 
     # ========== 状态查询 ==========
@@ -341,6 +356,18 @@ class BaseRobot(ABC):
             started_at=self._started_at,
             updated_at=_now_iso(),
         )
+
+    async def _broadcast_status(self) -> None:
+        """将当前状态快照推送给回调方（事件驱动，无回调则静默忽略）。"""
+        if self._status_callback is None:
+            return
+        try:
+            status = self.get_status().to_dict()
+            status.update(self.get_runtime_metrics())
+            status["timestamp"] = _now_iso()
+            await self._status_callback(status)
+        except Exception as exc:
+            logger.warning("Robot {} 状态广播失败: {}", self.robot_type, exc)
 
     # ========== 内部方法 ==========
 
