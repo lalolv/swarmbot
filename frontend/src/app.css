@@ -2,7 +2,6 @@
 
 @import "tailwindcss";
 @import "./themes/neobrutalism.css";
-@import "./themes/dark.css";
 
 @theme {
   /* 语义色 — 从 CSS 变量映射 */
@@ -129,28 +128,28 @@ body {
 }
 
 /* ===== Neon Dark 主题特有效果 ===== */
-[data-theme="dark"] .glass {
+[data-color-scheme="dark"] .glass {
   background: rgba(26, 26, 37, 0.7);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-[data-theme="dark"] .glass-strong {
+[data-color-scheme="dark"] .glass-strong {
   background: rgba(37, 37, 50, 0.85);
   backdrop-filter: blur(30px);
   -webkit-backdrop-filter: blur(30px);
   border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
-[data-theme="dark"] .neon-glow {
+[data-color-scheme="dark"] .neon-glow {
   box-shadow:
     0 0 0 1px rgba(0, 240, 255, 0.3),
     0 0 20px rgba(0, 240, 255, 0.2),
     inset 0 0 20px rgba(0, 240, 255, 0.05);
 }
 
-[data-theme="dark"] .gradient-text {
+[data-color-scheme="dark"] .gradient-text {
   background: linear-gradient(135deg, #00f0ff, #b829ff, #ff2d95);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;

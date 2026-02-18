@@ -45,8 +45,8 @@ const colorVar = computed(() => {
 });
 
 const colorHex = computed(() => {
-  // 依赖 themeStore.current 使主题切换时自动重新计算
-  void themeStore.current;
+  // 依赖 themeStore.colorScheme 使主题切换时自动重新计算
+  void themeStore.colorScheme;
   return getComputedStyle(document.documentElement)
     .getPropertyValue(colorVar.value)
     .trim();
