@@ -45,7 +45,8 @@ function selectMode(nextMode: ColorMode) {
     v-if="compact"
     v-model:open="panelOpen"
     panel-id="theme-control-panel"
-    panel-class="absolute right-0 top-full mt-2 w-[280px] bg-card border-(length:--theme-border-width) border-border rounded-(--theme-radius) shadow-card-hover overflow-hidden animate-slide-down z-50"
+    placement="bottom-end"
+    panel-class="w-[280px] bg-card border-(length:--theme-border-width) border-border rounded-(--theme-radius) shadow-card-hover overflow-hidden animate-slide-down z-50"
   >
     <template #trigger="{ open, toggle }">
       <button

@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+
+import { cn } from "@/lib/utils";
 
 const open = defineModel<boolean>("open", { default: false });
 
@@ -7,6 +9,7 @@ const props = withDefaults(
   defineProps<{
     panelId?: string;
     panelClass?: string;
+    placement?: "bottom-start" | "bottom-end";
     autoFocusFirst?: boolean;
     closeOnOutside?: boolean;
     closeOnEscape?: boolean;
@@ -15,6 +18,7 @@ const props = withDefaults(
   {
     panelId: undefined,
     panelClass: "",
+    placement: "bottom-end",
     autoFocusFirst: true,
     closeOnOutside: true,
     closeOnEscape: true,
@@ -25,6 +29,13 @@ const props = withDefaults(
 const rootRef = ref<HTMLElement | null>(null);
 const panelRef = ref<HTMLElement | null>(null);
 const triggerRef = ref<HTMLElement | null>(null);
+
+const panelPlacementClass = computed(() => {
+  if (props.placement === "bottom-start") {
+    return "absolute left-0 top-full mt-2";
+  }
+  return "absolute right-0 top-full mt-2";
+});
 
 function close(restoreFocus = props.restoreFocus) {
   if (!open.value) {
@@ -96,7 +107,7 @@ onBeforeUnmount(() => {
       :id="panelId"
       ref="panelRef"
       tabindex="-1"
-      :class="panelClass"
+      :class="cn(panelPlacementClass, panelClass)"
     >
       <slot :open="open" :close="close" />
     </div>

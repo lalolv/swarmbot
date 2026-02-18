@@ -171,7 +171,8 @@ async function deleteTask() {
         <DropdownPopover
           v-model:open="showTaskList"
           panel-id="task-list-panel"
-          panel-class="absolute top-full right-0 mt-2 w-72 bg-card border-(length:--theme-border-width) border-border rounded-(--theme-radius) shadow-card-hover overflow-hidden animate-slide-down"
+          placement="bottom-end"
+          panel-class="w-72 bg-card border-(length:--theme-border-width) border-border rounded-(--theme-radius) shadow-card-hover overflow-hidden animate-slide-down"
         >
           <template #trigger="{ open, toggle }">
             <Button variant="outline" size="sm" :aria-expanded="open" aria-controls="task-list-panel" aria-haspopup="true" @click="toggle">
