@@ -1,11 +1,11 @@
 ---
 name: create-vue-frontend
-description: Generate a Vue 3 + Vite + Tailwind CSS 4 frontend scaffold with infinite canvas, header bar, task management, SSE real-time subscription, and a dual-theme (Neo-Brutalism / Dark) design system. Use when the user asks to create or scaffold a Vue 3 frontend for a robot observability system, task dashboard, real-time monitoring UI, or similar data-driven application.
+description: Generate a Vue 3 + Vite + Tailwind CSS 4 frontend scaffold with infinite canvas, responsive header bar, task management, SSE real-time subscription, and a multi-theme (Neo-Brutalism / AI Native) + color-mode design system. Use when the user asks to create or scaffold a Vue 3 frontend for a robot observability system, task dashboard, real-time monitoring UI, or similar data-driven application.
 ---
 
 # Create Vue Frontend
 
-为机器人任务系统生成完整的 Vue 3 + Vite 前端脚手架（36 个文件）。
+为机器人任务系统生成完整的 Vue 3 + Vite 前端脚手架（37 个文件）。
 
 ## 必要输入
 
@@ -56,15 +56,15 @@ cd <target_dir> && npm install && npm run dev
 
 ## 生成内容
 
-脚本按以下顺序生成 36 个文件：
+脚本按以下顺序生成 37 个文件：
 
 **配置层**：`package.json` / `vite.config.ts` / `tsconfig.json` / `tsconfig.node.json` / `index.html`
 
-**主题系统**：`src/themes/index.ts` / `neobrutalism.css` / `dark.css` / `src/app.css`
+**主题系统**：`src/themes/index.ts` / `neobrutalism.css` / `ai-native.css` / `src/app.css`
 
 **核心层**：`src/main.ts` / `src/lib/utils.ts` / `src/stores/theme.ts` / `src/stores/observability.ts` / `src/composables/useTheme.ts` / `src/api/client.ts`
 
-**UI 组件库**：Button / Badge / Dialog / Input / Alert / Card（各含 `.vue` + `index.ts`）
+**UI 组件库**：Button / Badge / Dialog / Input / Alert / Card（各含 `.vue` + `index.ts`）+ DropdownPopover（`.vue` + `index.ts`）
 
 **业务组件**：`ThemeSwitcher.vue` / `Header.vue` / `InfiniteCanvas.vue` / `RobotCard.vue` / `RobotAvatar.vue`
 
@@ -72,7 +72,8 @@ cd <target_dir> && npm install && npm run dev
 
 ## 架构说明
 
-- **主题**：CSS 变量 + `data-theme` 属性切换，Neo-Brutalism（粗边框/硬阴影）与 Dark（霓虹发光）双主题
+- **主题**：双属性主题系统（`data-theme` + `data-color-scheme`），内置 Neo-Brutalism / AI Native 两个主题，并支持 light/dark/system 三种模式
+- **标题栏**：响应式单行布局，主题选择与任务列表均采用统一 `DropdownPopover` 下拉交互（外部点击关闭、Esc 关闭、自动聚焦）
 - **无限画布**：鼠标拖拽平移 + 滚轮缩放（0.3×~3×）+ Fit All + Reset Layout
 - **SSE**：`observability` store 管理 EventSource 连接，处理 7 种事件类型
 - **机器人卡片**：6 色轮换，支持 data_update 进度条 / process_result 转换流 / 通用 KV 可视化

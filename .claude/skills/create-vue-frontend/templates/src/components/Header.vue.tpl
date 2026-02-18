@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogHeader, DialogFooter } from "@/components/ui/dialog";
+import { DropdownPopover } from "@/components/ui/dropdown";
 import ThemeSwitcher from "@/components/ThemeSwitcher.vue";
 import type { TaskItem } from "@/api/client";
 
@@ -55,6 +56,19 @@ const connectionBadgeVariant = computed(() => {
     default:
       return "outline" as const;
   }
+});
+
+const connectionDotClass = computed(() => {
+  if (props.connectionState === "connected") {
+    return "status-running";
+  }
+  if (props.connectionState === "connecting" || props.connectionState === "reconnecting") {
+    return "status-connecting";
+  }
+  if (props.connectionState === "error" || props.connectionState === "closed") {
+    return "status-error";
+  }
+  return "status-idle";
 });
 
 // Methods
@@ -108,12 +122,12 @@ async function deleteTask() {
 
 <template>
   <header
-    class="fixed top-0 left-0 right-0 z-50 h-16 bg-card border-b-(length:--theme-border-width) border-border"
+    class="fixed top-0 left-0 right-0 z-50 h-16 bg-card/90 backdrop-blur border-b-(length:--theme-border-width) border-border"
   >
-    <div class="h-full px-4 flex items-center justify-between">
+    <div class="h-full px-3 sm:px-4 lg:px-6 flex items-center gap-3">
       <!-- Logo & Title -->
-      <div class="flex items-center gap-4">
-        <div class="flex items-center gap-3">
+      <div class="min-w-0 flex-1 flex items-center gap-3 sm:gap-4">
+        <div class="min-w-0 flex items-center gap-3">
           <div
             class="w-8 h-8 rounded-(--theme-radius) bg-primary flex items-center justify-center border-(length:--theme-border-width) border-border shadow-card"
           >
@@ -122,52 +136,61 @@ async function deleteTask() {
                 d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
             </svg>
           </div>
-          <div>
-            <h1 class="font-display text-lg font-bold text-foreground">{app_name}</h1>
-            <p class="text-[10px] text-muted-foreground tracking-wider uppercase">{app_subtitle}</p>
+          <div class="min-w-0">
+            <h1 class="font-display text-base sm:text-lg leading-tight font-bold text-foreground truncate">{app_name}</h1>
+            <p class="hidden sm:block text-[10px] text-muted-foreground tracking-wider uppercase truncate">{app_subtitle}</p>
           </div>
         </div>
 
         <!-- Connection Status -->
-        <Badge :variant="connectionBadgeVariant" class="hidden sm:inline-flex">
-          <span class="status-dot mr-1.5" :class="`status-${connectionState === 'connected' ? 'running' : connectionState === 'connecting' ? 'connecting' : 'idle'}`"></span>
+        <Badge :variant="connectionBadgeVariant" class="hidden lg:inline-flex">
+          <span class="status-dot mr-1.5" :class="connectionDotClass"></span>
           {{ connectionState }}
         </Badge>
+
+        <div class="lg:hidden flex items-center gap-2 px-2 h-8 rounded-(--theme-radius) border-(length:--theme-border-width) border-border bg-surface">
+          <span class="status-dot" :class="connectionDotClass"></span>
+          <span class="text-[11px] font-mono uppercase text-muted-foreground">{{ connectionState }}</span>
+        </div>
       </div>
 
       <!-- Actions -->
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 shrink-0">
         <!-- Theme Switcher -->
-        <ThemeSwitcher />
+        <ThemeSwitcher compact />
 
         <!-- Create Task Button -->
         <Button @click="showCreateModal = true" size="sm">
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
           </svg>
-          <span class="hidden sm:inline">创建任务</span>
+          <span class="hidden md:inline">创建任务</span>
         </Button>
 
         <!-- Task List Dropdown -->
-        <div class="relative">
-          <Button variant="outline" size="sm" @click="showTaskList = !showTaskList">
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-            </svg>
-            <span class="hidden sm:inline max-w-[120px] truncate">
-              {{ currentTaskId || '选择任务' }}
-            </span>
-            <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-180': showTaskList }" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-            </svg>
-          </Button>
+        <DropdownPopover
+          v-model:open="showTaskList"
+          panel-id="task-list-panel"
+          placement="bottom-end"
+          offset="md"
+          panel-class="w-72 bg-card border-(length:--theme-border-width) border-border rounded-(--theme-radius) shadow-card-hover overflow-hidden animate-slide-down"
+        >
+          <template #trigger="{ open, toggle }">
+            <Button variant="outline" size="sm" :aria-expanded="open" aria-controls="task-list-panel" aria-haspopup="true" @click="toggle">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+              <span class="hidden md:inline max-w-[120px] truncate">
+                {{ currentTaskId || '选择任务' }}
+              </span>
+              <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-180': open }" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </Button>
+          </template>
 
-          <!-- Task List Dropdown Menu -->
-          <div
-            v-if="showTaskList"
-            class="absolute top-full right-0 mt-2 w-72 bg-card border-(length:--theme-border-width) border-border rounded-(--theme-radius) shadow-card-hover overflow-hidden animate-slide-down"
-          >
+          <template #default="{ close }">
             <div class="p-3 border-b border-border flex items-center justify-between">
               <span class="text-xs font-display font-semibold text-muted-foreground uppercase tracking-wider">任务列表</span>
               <button @click="$emit('refresh-tasks')" class="text-xs font-semibold text-primary hover:underline">
@@ -181,7 +204,7 @@ async function deleteTask() {
               <button
                 v-for="task in tasks"
                 :key="task.task_id"
-                @click="selectTask(task.task_id)"
+                @click="selectTask(task.task_id); close(false)"
                 class="w-full px-4 py-3 text-left hover:bg-muted transition-colors flex items-center gap-3"
                 :class="{ 'bg-primary/10': task.task_id === currentTaskId }"
               >
@@ -195,8 +218,8 @@ async function deleteTask() {
                 </svg>
               </button>
             </div>
-          </div>
-        </div>
+          </template>
+        </DropdownPopover>
 
         <!-- Subscribe Toggle -->
         <Button
@@ -210,7 +233,7 @@ async function deleteTask() {
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
           </svg>
-          <span class="hidden sm:inline">订阅</span>
+          <span class="hidden md:inline">订阅</span>
         </Button>
 
         <Button
@@ -222,7 +245,7 @@ async function deleteTask() {
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
           </svg>
-          <span class="hidden sm:inline">取消订阅</span>
+          <span class="hidden md:inline">取消订阅</span>
         </Button>
 
         <!-- Delete Task -->
@@ -237,7 +260,7 @@ async function deleteTask() {
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
           </svg>
-          <span class="hidden sm:inline">删除</span>
+          <span class="hidden md:inline">删除</span>
         </Button>
       </div>
     </div>

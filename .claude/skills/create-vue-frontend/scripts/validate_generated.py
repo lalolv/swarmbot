@@ -25,7 +25,7 @@ REQUIRED_FILES = [
     "src/lib/utils.ts",
     "src/themes/index.ts",
     "src/themes/neobrutalism.css",
-    "src/themes/dark.css",
+    "src/themes/ai-native.css",
     "src/stores/theme.ts",
     "src/stores/observability.ts",
     "src/composables/useTheme.ts",
@@ -41,6 +41,7 @@ REQUIRED_FILES = [
     "src/components/ui/input/Input.vue",
     "src/components/ui/alert/Alert.vue",
     "src/components/ui/card/Card.vue",
+    "src/components/ui/dropdown/DropdownPopover.vue",
 ]
 
 
