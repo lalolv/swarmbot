@@ -18,7 +18,9 @@
       "Bash(uv run ruff check:*)",
       "Bash(__NEW_LINE_f01e1b92ff2cd439__ echo \"\")",
       "Bash(python3:*)",
-      "Bash(SKILL_DIR=\"/Volumes/UWorks/Projects/Aixtrade/pm-sports-bots/.claude/skills/create-vue-frontend\":*)"
+      "Bash(SKILL_DIR=\"/Volumes/UWorks/Projects/Aixtrade/pm-sports-bots/.claude/skills/create-vue-frontend\":*)",
+      "Bash(find:*)",
+      "Bash(cargo add:*)"
     ]
   }
 }

@@ -2,8 +2,7 @@
 
 from .base import BaseRobot, RobotState, RobotStatus, Signal
 from .composer import TaskComposer
-from .sample_producer import SampleProducer
-from .sample_consumer import SampleConsumer
+from .rust_proxy import RustRobotProxy
 
 __all__ = [
     "BaseRobot",
@@ -11,6 +10,5 @@ __all__ = [
     "RobotStatus",
     "Signal",
     "TaskComposer",
-    "SampleProducer",
-    "SampleConsumer",
+    "RustRobotProxy",
 ]

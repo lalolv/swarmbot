@@ -1,8 +1,14 @@
-"""Robot 任务编排器。"""
+"""Robot 任务编排器。
+
+自动扫描 robots/*_bot/ 子目录，发现并注册所有 BaseRobot 子类。
+新增机器人只需创建 xxx_bot/ 目录并在 robot.py 中声明类，无需修改此文件。
+"""
 
 from __future__ import annotations
 
 import asyncio
+import importlib
+from pathlib import Path
 from typing import Any
 
 from loguru import logger
@@ -10,25 +16,51 @@ from loguru import logger
 from pm_sports_bots.shared import RedisClient, TaskConfig
 
 from .base import BaseRobot, StatusCallback
-from .sample_producer import SampleProducer
-from .sample_consumer import SampleConsumer
+
+
+def _discover_robots() -> dict[str, type[BaseRobot]]:
+    """自动扫描 *_bot/ 子目录，注册所有声明了 robot_type 的 BaseRobot 子类。"""
+    robots_dir = Path(__file__).parent
+    registry: dict[str, type[BaseRobot]] = {}
+
+    for bot_dir in sorted(robots_dir.glob("*_bot")):
+        if not bot_dir.is_dir() or not (bot_dir / "robot.py").exists():
+            continue
+
+        module_name = f"pm_sports_bots.robots.{bot_dir.name}"
+        try:
+            module = importlib.import_module(module_name)
+        except Exception as exc:
+            logger.warning("自动发现：跳过 {} — {}", bot_dir.name, exc)
+            continue
+
+        for obj in vars(module).values():
+            if (
+                isinstance(obj, type)
+                and issubclass(obj, BaseRobot)
+                and obj is not BaseRobot
+                and getattr(obj, "robot_type", None)
+            ):
+                if obj.robot_type != bot_dir.name:
+                    raise ValueError(
+                        f"{bot_dir.name}/robot.py 中 robot_type='{obj.robot_type}' "
+                        f"与目录名不一致，应改为 '{bot_dir.name}'"
+                    )
+                registry[obj.robot_type] = obj
+                logger.debug("自动注册机器人: type={} class={}", obj.robot_type, obj.__name__)
+
+    return registry
 
 
 class TaskComposer:
-    """根据 TaskConfig 创建并管理机器人。
+    """根据 TaskConfig 创建并管理机器人。"""
 
-    # 🔧 自定义点: 在 compose() 中添加新机器人的实例化逻辑
-    """
+    ROBOT_REGISTRY: dict[str, type[BaseRobot]] = _discover_robots()
 
     def __init__(self, redis: RedisClient):
         self.redis = redis
         self._robots: dict[str, list[BaseRobot]] = {}
         self._robot_tasks: dict[str, list[asyncio.Task[None]]] = {}
-
-    ROBOT_REGISTRY = {
-        "sample_producer": SampleProducer,
-        "sample_consumer": SampleConsumer,
-    }
 
     @classmethod
     def available_robot_types(cls) -> list[str]:
@@ -42,7 +74,7 @@ class TaskComposer:
     ) -> list[BaseRobot]:
         """根据配置创建任务对应的机器人列表。
 
-        # 🔧 自定义点: 添加条件创建逻辑
+        未指定 custom_config.robots 时，默认启动 sample_producer + sample_consumer。
         """
         cfg = config.to_dict()
         custom_config = cfg.get("custom_config") or {}
@@ -50,10 +82,10 @@ class TaskComposer:
 
         robots: list[BaseRobot] = []
         if configured_robots is None:
-            robots = [
-                SampleProducer(task_id, self.redis, cfg, status_callback),
-                SampleConsumer(task_id, self.redis, cfg, status_callback),
-            ]
+            for robot_type in ("producer_bot", "consumer_bot"):
+                robot_cls = self.ROBOT_REGISTRY.get(robot_type)
+                if robot_cls:
+                    robots.append(robot_cls(task_id, self.redis, cfg, status_callback))
         else:
             if not isinstance(configured_robots, list):
                 raise ValueError("custom_config.robots must be a list")

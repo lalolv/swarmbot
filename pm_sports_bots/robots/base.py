@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
@@ -145,6 +146,7 @@ class BaseRobot(ABC):
         self._started_at: str | None = None
         self._cancelled = False
         self._status_callback = status_callback
+        self._last_status_broadcast_at: float = 0.0
 
     # ========== 抽象属性/方法（子类必须实现） ==========
 
@@ -164,6 +166,13 @@ class BaseRobot(ABC):
 
     output_streams: list[StreamName] = []
     """发布的 stream 名列表。空列表表示不发布到任何 stream。"""
+
+    xread_block_ms: int = 1000
+    """xread 阻塞超时（毫秒）。低延迟机器人（如量化交易）可设为 50-100。"""
+
+    status_broadcast_min_interval: float = 0.0
+    """状态广播最小间隔（秒）。0 表示每次信号都广播（当前默认行为）。
+    高频机器人（如量化交易）建议设为 2.0，回测机器人建议设为 5.0。"""
 
     # ========== 可选覆盖 ==========
 
@@ -258,7 +267,7 @@ class BaseRobot(ABC):
                         results = await self.redis.xread(
                             streams=last_ids,
                             count=100,
-                            block=1000,  # 固定 1s 超时，保证取消响应及时
+                            block=self.xread_block_ms,
                         )
                     except Exception as exc:
                         logger.warning("Robot {} xread 异常: {}", self.robot_type, exc)
@@ -365,9 +374,18 @@ class BaseRobot(ABC):
         )
 
     async def _broadcast_status(self) -> None:
-        """将当前状态快照推送给回调方（事件驱动，无回调则静默忽略）。"""
+        """将当前状态快照推送给回调方（事件驱动，无回调则静默忽略）。
+
+        若 status_broadcast_min_interval > 0，则节流广播频率，
+        避免高频信号场景（量化交易等）产生大量冗余 Redis 写入。
+        """
         if self._status_callback is None:
             return
+        if self.status_broadcast_min_interval > 0:
+            now = time.monotonic()
+            if now - self._last_status_broadcast_at < self.status_broadcast_min_interval:
+                return
+            self._last_status_broadcast_at = now
         try:
             status = self.get_status().to_dict()
             status.update(self.get_runtime_metrics())

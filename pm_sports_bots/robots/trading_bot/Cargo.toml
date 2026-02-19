@@ -1,0 +1,34 @@
+[package]
+name = "trading-bot"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "trading-bot"
+path = "src/main.rs"
+
+[dependencies]
+# 异步运行时
+tokio = { version = "1", features = ["full"] }
+
+# Redis 客户端（支持 Streams）
+redis = { version = "1", features = ["tokio-comp", "streams"] }
+
+# JSON 序列化
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# 时间戳
+chrono = { version = "0.4", features = ["serde"] }
+
+# 结构化日志
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# 错误处理
+anyhow = "1"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
