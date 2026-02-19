@@ -82,7 +82,7 @@ class TaskComposer:
 
         robots: list[BaseRobot] = []
         if configured_robots is None:
-            for robot_type in ("producer_bot", "consumer_bot"):
+            for robot_type in ("ticker_bot", "transform_bot"):
                 robot_cls = self.ROBOT_REGISTRY.get(robot_type)
                 if robot_cls:
                     robots.append(robot_cls(task_id, self.redis, cfg, status_callback))

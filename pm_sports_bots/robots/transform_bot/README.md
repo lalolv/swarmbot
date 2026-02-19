@@ -1,6 +1,6 @@
-# Consumer Bot
+# Transform Bot
 
-数据处理机器人，订阅 `data` 流，对数值做线性变换后写入 `output` 流。
+数据处理示例机器人，订阅 `data` 流，对数值做线性变换后写入 `output` 流。
 
 ## 类型
 Python（asyncio）
@@ -22,4 +22,4 @@ Python（asyncio）
 | offset     | float | 0.0    | 线性变换偏移量         |
 
 ## 注册名称
-`consumer_bot`
+`transform_bot`

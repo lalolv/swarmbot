@@ -1,6 +1,6 @@
-# Producer Bot
+# Ticker Bot
 
-随机数据生成机器人，模拟数据源，周期性向 `data` 流发送数值信号。
+定期生成随机价格数据的示例机器人，模拟数据源，周期性向 `data` 流发送数值信号。
 
 ## 类型
 Python（asyncio）
@@ -21,4 +21,4 @@ Python（asyncio）
 | max_value     | float | 100.0  | 随机数上界         |
 
 ## 注册名称
-`producer_bot`
+`ticker_bot`
