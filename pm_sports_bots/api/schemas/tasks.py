@@ -16,6 +16,8 @@ class RobotSpec(BaseModel):
 class CreateTaskRequest(BaseModel):
     task_id: str | None = None
     user_id: str = ""
+    name: str = ""
+    description: str = ""
     custom_config: dict[str, Any] = Field(default_factory=dict)
     robots: list[RobotSpec | str] | None = None
 

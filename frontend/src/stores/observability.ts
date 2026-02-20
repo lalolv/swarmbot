@@ -42,6 +42,8 @@ export interface StreamCounts {
 export interface CreateTaskForm {
   taskId: string;
   userId: string;
+  name: string;
+  description: string;
   selectedRobots: string[];
 }
 
@@ -141,6 +143,8 @@ export const useObservabilityStore = defineStore("observability", {
       const payload: CreateTaskPayload = {
         task_id: form.taskId || undefined,
         user_id: form.userId || "",
+        name: form.name || undefined,
+        description: form.description || undefined,
         robots: selectedRobots,
         custom_config: {},
       };

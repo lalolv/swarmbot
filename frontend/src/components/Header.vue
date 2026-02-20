@@ -32,6 +32,8 @@ const creating = ref(false);
 const createForm = reactive({
   taskId: "",
   userId: "",
+  name: "",
+  description: "",
   selectedRobots: [] as string[],
 });
 
@@ -93,6 +95,8 @@ async function submitCreate() {
     showCreateModal.value = false;
     createForm.taskId = "";
     createForm.userId = "";
+    createForm.name = "";
+    createForm.description = "";
     createForm.selectedRobots = [];
   } finally {
     creating.value = false;
@@ -210,8 +214,11 @@ async function deleteTask() {
               >
                 <span class="status-dot" :class="task.status?.state === 'running' ? 'status-running' : 'status-idle'"></span>
                 <div class="flex-1 min-w-0">
-                  <div class="text-sm font-semibold text-foreground truncate">{{ task.task_id }}</div>
-                  <div class="text-xs text-muted-foreground">{{ task.status?.state || 'unknown' }}</div>
+                  <div class="text-sm font-semibold text-foreground truncate">{{ task.config?.name || task.task_id }}</div>
+                  <div class="text-xs text-muted-foreground flex items-center gap-1.5">
+                    <span>{{ task.status?.state || 'unknown' }}</span>
+                    <span v-if="task.config?.name" class="font-mono opacity-60">· {{ task.task_id }}</span>
+                  </div>
                 </div>
                 <svg v-if="task.task_id === currentTaskId" class="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
@@ -288,6 +295,13 @@ async function deleteTask() {
 
       <!-- Modal Body -->
       <div class="p-6 space-y-5">
+        <div>
+          <label class="block text-xs font-display font-semibold text-muted-foreground mb-2 uppercase tracking-wider">
+            任务名称 <span class="text-destructive">*</span>
+          </label>
+          <Input v-model="createForm.name" placeholder="为任务起一个易识别的名称" />
+        </div>
+
         <div class="grid grid-cols-2 gap-4">
           <div>
             <label class="block text-xs font-display font-semibold text-muted-foreground mb-2 uppercase tracking-wider">任务 ID</label>
@@ -297,6 +311,16 @@ async function deleteTask() {
             <label class="block text-xs font-display font-semibold text-muted-foreground mb-2 uppercase tracking-wider">用户 ID</label>
             <Input v-model="createForm.userId" placeholder="可选" />
           </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-display font-semibold text-muted-foreground mb-2 uppercase tracking-wider">描述</label>
+          <textarea
+            v-model="createForm.description"
+            placeholder="任务用途说明（选填）"
+            rows="2"
+            class="w-full px-3 py-2 text-sm bg-background border-(length:--theme-border-width) border-border rounded-(--theme-radius) text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+          ></textarea>
         </div>
 
         <div>

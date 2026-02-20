@@ -8,6 +8,10 @@ export interface TaskItem {
     state: string;
     updated_at?: string;
   };
+  config?: {
+    name?: string;
+    description?: string;
+  };
 }
 
 export interface TaskListResponse {
@@ -30,6 +34,8 @@ export interface RobotTypesResponse {
 export interface CreateTaskPayload {
   task_id?: string;
   user_id: string;
+  name?: string;
+  description?: string;
   robots: string[];
   custom_config: Record<string, unknown>;
 }

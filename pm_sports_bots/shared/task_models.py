@@ -27,6 +27,8 @@ class TaskConfig:
 
     task_id: str = ""
     user_id: str = ""
+    name: str = ""
+    description: str = ""
     custom_config: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -43,6 +45,8 @@ class TaskConfig:
         return cls(
             task_id=str(data.get("task_id", "")),
             user_id=str(data.get("user_id", "")),
+            name=str(data.get("name", "")),
+            description=str(data.get("description", "")),
             custom_config=data.get("custom_config") or {},
         )
 

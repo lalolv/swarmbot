@@ -85,6 +85,8 @@ async def create_task(request: Request, body: CreateTaskRequest) -> dict[str, An
     config_payload = {
         "task_id": task_id,
         "user_id": body.user_id,
+        "name": body.name,
+        "description": body.description,
         "custom_config": custom_config,
     }
     message = {
