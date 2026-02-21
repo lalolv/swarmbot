@@ -121,17 +121,11 @@ export const useObservabilityStore = defineStore("observability", {
       ]);
       this.tasks = tasksRes.items || [];
       this.robotTypes = robotsRes.robot_types || [];
-      if (!this.monitorTaskId && this.tasks.length > 0) {
-        this.monitorTaskId = this.tasks[0].task_id;
-      }
     },
 
     async refreshTasks() {
       const res = await fetchTasks();
       this.tasks = res.items || [];
-      if (!this.monitorTaskId && this.tasks.length > 0) {
-        this.monitorTaskId = this.tasks[0].task_id;
-      }
     },
 
     async createNewTask(form: CreateTaskForm) {
@@ -178,7 +172,7 @@ export const useObservabilityStore = defineStore("observability", {
             (item) => item.task_id === taskId
           );
           if (!stillExists) {
-            this.monitorTaskId = this.tasks[0]?.task_id || "";
+            this.monitorTaskId = "";
           }
           throw new Error(`任务不存在或已被清理: ${taskId}`);
         }
@@ -351,7 +345,7 @@ export const useObservabilityStore = defineStore("observability", {
             (item) => item.task_id === resolvedId
           );
           if (!stillExists) {
-            this.monitorTaskId = this.tasks[0]?.task_id || "";
+            this.monitorTaskId = "";
           }
           throw new Error(`任务不存在或已被清理: ${resolvedId}`);
         }

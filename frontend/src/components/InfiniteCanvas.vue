@@ -4,6 +4,8 @@ import RobotCard from "./RobotCard.vue";
 import { Button } from "@/components/ui/button";
 import type { RobotState } from "@/stores/observability";
 
+defineOptions({ name: "InfiniteCanvas" });
+
 interface DisplayRobot extends RobotState {
   position: { x: number; y: number };
 }
@@ -186,6 +188,24 @@ function resetLayout() {
   initializeRobotPositions();
   animateTransform({ x: 0, y: 0, scale: 1 });
 }
+
+// 定位到指定机器人（由外部面板调用）
+// 机器人卡片坐标系：left = 50% + pos.x，top = 50% + pos.y
+// 与 fitAll 保持一致：tx = W/2 - (W/2 + pos.x) * scale
+function focusRobot(robotType: string) {
+  const pos = robotPositions.value.get(robotType);
+  if (!pos || !canvasRef.value) return;
+
+  const rect = canvasRef.value.getBoundingClientRect();
+  const scale = Math.max(0.5, Math.min(1.5, transform.value.scale));
+  animateTransform({
+    x: rect.width / 2 - (rect.width / 2 + pos.x) * scale,
+    y: rect.height / 2 - (rect.height / 2 + pos.y) * scale,
+    scale,
+  });
+}
+
+defineExpose({ focusRobot });
 </script>
 
 <template>

@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted } from "vue";
+import { onBeforeUnmount, onMounted, ref } from "vue";
 
 import Header from "./components/Header.vue";
 import InfiniteCanvas from "./components/InfiniteCanvas.vue";
+import TaskListPanel from "./components/TaskListPanel.vue";
+import RobotListPanel from "./components/RobotListPanel.vue";
 import { Alert } from "./components/ui/alert";
 import { useObservabilityStore } from "./stores/observability";
 import { useTheme } from "./composables/useTheme";
@@ -10,12 +12,8 @@ import { useTheme } from "./composables/useTheme";
 const store = useObservabilityStore();
 const { isDark } = useTheme();
 
-// Computed
-const isSubscribed = computed(
-  () =>
-    store.connectionState === "connected" ||
-    store.connectionState === "connecting"
-);
+// 画布 ref，用于调用 focusRobot
+const canvasRef = ref<InstanceType<typeof InfiniteCanvas> | null>(null);
 
 // Methods
 async function handleCreateTask(form: any) {
@@ -23,18 +21,8 @@ async function handleCreateTask(form: any) {
 }
 
 async function handleSelectTask(taskId: string) {
-  store.monitorTaskId = taskId;
-  if (isSubscribed.value) {
-    store.stopMonitoring();
-  }
-}
-
-async function handleSubscribe(taskId: string) {
+  // 选择即订阅；startMonitoring 内部会先 stopMonitoring 取消上一个订阅
   await store.startMonitoring(taskId);
-}
-
-function handleUnsubscribe() {
-  store.stopMonitoring();
 }
 
 async function handleDeleteTask(taskId: string) {
@@ -43,6 +31,10 @@ async function handleDeleteTask(taskId: string) {
 
 async function handleRefreshTasks() {
   await store.refreshTasks();
+}
+
+function handleFocusRobot(robotType: string) {
+  canvasRef.value?.focusRobot(robotType);
 }
 
 // Lifecycle
@@ -67,29 +59,36 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <!-- Header -->
-    <Header
-      :tasks="store.tasks"
-      :robot-types="store.robotTypes"
-      :current-task-id="store.monitorTaskId"
-      :is-subscribed="isSubscribed"
-      :connection-state="store.connectionState"
-      @create-task="handleCreateTask"
-      @select-task="handleSelectTask"
-      @subscribe="handleSubscribe"
-      @unsubscribe="handleUnsubscribe"
-      @delete-task="handleDeleteTask"
-      @refresh-tasks="handleRefreshTasks"
-    />
+    <!-- Header（只保留 Logo + 主题切换） -->
+    <Header />
 
-    <!-- Main Content -->
+    <!-- Main Content（无限画布） -->
     <main class="absolute inset-0 pt-16">
       <InfiniteCanvas
+        ref="canvasRef"
         :robots="store.robotList"
         :task-id="store.monitorTaskId"
         :task-state="store.taskState"
       />
     </main>
+
+    <!-- 左侧：任务列表面板 -->
+    <TaskListPanel
+      :tasks="store.tasks"
+      :robot-types="store.robotTypes"
+      :current-task-id="store.monitorTaskId"
+      @create-task="handleCreateTask"
+      @select-task="handleSelectTask"
+      @delete-task="handleDeleteTask"
+      @refresh-tasks="handleRefreshTasks"
+    />
+
+    <!-- 右侧：机器人列表面板 -->
+    <RobotListPanel
+      :robots="store.robotList"
+      :task-id="store.monitorTaskId"
+      @focus-robot="handleFocusRobot"
+    />
 
     <!-- Toast Notification -->
     <Transition name="toast">
