@@ -16,14 +16,45 @@ const props = defineProps<{
   taskState: string;
 }>();
 
-// Canvas state
+// ===== Per-task position persistence =====
+
+// Session-level cache: survives reactive re-renders within a page session
+const taskPositionCache = new Map<string, Map<string, { x: number; y: number }>>();
+
+function loadPositionsForTask(taskId: string): Map<string, { x: number; y: number }> {
+  if (taskPositionCache.has(taskId)) {
+    return taskPositionCache.get(taskId)!;
+  }
+  try {
+    const raw = localStorage.getItem(`robot-positions:${taskId}`);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Record<string, { x: number; y: number }>;
+      const map = new Map(Object.entries(parsed));
+      taskPositionCache.set(taskId, map);
+      return map;
+    }
+  } catch { /* ignore */ }
+  const newMap = new Map<string, { x: number; y: number }>();
+  taskPositionCache.set(taskId, newMap);
+  return newMap;
+}
+
+function savePositionsForTask(taskId: string, positions: Map<string, { x: number; y: number }>) {
+  taskPositionCache.set(taskId, positions);
+  try {
+    localStorage.setItem(`robot-positions:${taskId}`, JSON.stringify(Object.fromEntries(positions)));
+  } catch { /* ignore quota errors */ }
+}
+
+// ===== Canvas state =====
+
 const canvasRef = ref<HTMLDivElement | null>(null);
 const transform = ref({ x: 0, y: 0, scale: 1 });
 const isDragging = ref(false);
 const dragStart = ref({ x: 0, y: 0 });
 const isAnimating = ref(false);
 
-// Robot positions (persisted during session)
+// Robot positions for current task
 const robotPositions = ref(new Map<string, { x: number; y: number }>());
 
 function initializeRobotPositions() {
@@ -57,6 +88,18 @@ function initializeRobotPositions() {
     });
   }
 }
+
+// Watch taskId FIRST so positions map is swapped before robots watcher runs
+watch(
+  () => props.taskId,
+  (newTaskId, oldTaskId) => {
+    if (oldTaskId) {
+      savePositionsForTask(oldTaskId, robotPositions.value);
+    }
+    robotPositions.value = newTaskId ? loadPositionsForTask(newTaskId) : new Map();
+  },
+  { immediate: true }
+);
 
 watch(
   () => props.robots,
@@ -131,6 +174,12 @@ function onRobotMove(robotType: string, deltaX: number, deltaY: number) {
   }
 }
 
+function onRobotMoveEnd() {
+  if (props.taskId) {
+    savePositionsForTask(props.taskId, robotPositions.value);
+  }
+}
+
 function animateTransform(newTransform: {
   x: number;
   y: number;
@@ -187,6 +236,9 @@ function resetLayout() {
   robotPositions.value.clear();
   initializeRobotPositions();
   animateTransform({ x: 0, y: 0, scale: 1 });
+  if (props.taskId) {
+    savePositionsForTask(props.taskId, robotPositions.value);
+  }
 }
 
 // 定位到指定机器人（由外部面板调用）
@@ -205,7 +257,14 @@ function focusRobot(robotType: string) {
   });
 }
 
-defineExpose({ focusRobot });
+function clearTaskPositions(taskId: string) {
+  taskPositionCache.delete(taskId);
+  try {
+    localStorage.removeItem(`robot-positions:${taskId}`);
+  } catch { /* ignore */ }
+}
+
+defineExpose({ focusRobot, clearTaskPositions });
 </script>
 
 <template>
@@ -235,6 +294,7 @@ defineExpose({ focusRobot });
         :robot="robot"
         :scale="transform.scale"
         @move="(dx: number, dy: number) => onRobotMove(robot.robot_type, dx, dy)"
+        @move-end="onRobotMoveEnd"
       />
 
       <!-- Empty State -->

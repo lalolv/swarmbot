@@ -27,6 +27,7 @@ async function handleSelectTask(taskId: string) {
 
 async function handleDeleteTask(taskId: string) {
   await store.cleanupTask(taskId);
+  canvasRef.value?.clearTaskPositions(taskId);
 }
 
 async function handleRefreshTasks() {

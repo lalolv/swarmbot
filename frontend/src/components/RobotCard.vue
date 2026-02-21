@@ -17,6 +17,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   move: [dx: number, dy: number];
+  "move-end": [];
 }>();
 
 // --- 色板（通过 CSS 变量适配明暗主题） ---
@@ -73,9 +74,11 @@ function onMouseMove(e: MouseEvent) {
 }
 
 function onMouseUp() {
+  if (!isDragging.value) return;
   isDragging.value = false;
   document.removeEventListener("mousemove", onMouseMove);
   document.removeEventListener("mouseup", onMouseUp);
+  emit("move-end");
 }
 
 // --- 时间 ---
