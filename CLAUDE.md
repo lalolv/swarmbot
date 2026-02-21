@@ -41,25 +41,78 @@ No `tests/` directory exists yet. Always run `compileall` as minimum verificatio
 
 Four backend layers under `pm_sports_bots/`:
 
-- **`shared/`** — Redis client wrapper, channel/key naming (`Channels`), domain models (`TaskConfig`, `TaskStatus`, `TaskState` enum), Pydantic schemas
-- **`robots/`** — `BaseRobot` ABC with two modes: **Producer** (polling via `on_tick()`) and **Consumer** (stream-based `on_signal()`). `TaskComposer` is the factory/registry for robot types
-- **`worker/`** — `TaskManager` listens to control channel, manages task lifecycle. `RobotTask` is the runtime container per task (composes robots, monitors config, handles hot-reload)
+- **`shared/`** — Redis client wrapper, channel/key naming (`Channels`, `StreamName`, `SignalType`), domain models (`TaskConfig`, `TaskStatus`, `TaskState`), Pydantic schemas
+- **`robots/`** — `BaseRobot` ABC; `RustRobotProxy` for Rust subprocess robots; `TaskComposer` auto-discovers and instantiates robots
+- **`worker/`** — `TaskManager` listens to control channel, manages task lifecycle; `RobotTask` composes robots, monitors config, handles hot-reload; `ExecutionDedupe` prevents duplicate task startup
 - **`api/`** — FastAPI routes under `/api/v1/`. Task CRUD publishes to control channel. SSE bridge at `/api/v1/live/subscribe/{task_id}` converts Redis Streams → Server-Sent Events
 
 Frontend (`frontend/src/`): Vue 3 app with Pinia store (`stores/observability.js`) managing SSE subscription, robot state, and stream counters.
 
 ### Task Lifecycle
 1. API creates task → publishes to Redis control channel
-2. Worker's TaskManager picks it up → TaskComposer instantiates robots
-3. Robots emit signals to task-scoped streams (`pm_sports_bots:task:TASK_ID:stream:NAME`)
-4. SSE bridge streams events to frontend in real-time
-5. PATCH triggers hot-reload; DELETE cancels/purges
+2. Worker's `TaskManager` picks it up → `RobotTask.run()` starts
+3. `TaskComposer.compose()` instantiates robots per `custom_config.robots` (defaults to `ticker_bot` + `transform_bot`)
+4. Robots emit signals to task-scoped streams (`pm_sports_bots:task:TASK_ID:stream:NAME`)
+5. SSE bridge streams events to frontend in real-time
+6. PATCH triggers hot-reload (robots stop and restart with new config); DELETE cancels/purges
 
 ### Key Contracts
-- Redis keys/streams are centralized in `Channels` — update `Channels.ALL_STREAMS` when adding streams
-- New robots must extend `BaseRobot` and register via `TaskComposer`
-- Signal payloads are JSON with `ensure_ascii=False`; keep schema stable
-- API response envelopes use consistent fields (`accepted`, `task_id`, `message`)
+- **Stream names** are defined in `StreamName` enum (`channels.py`); `Channels.ALL_STREAMS` is auto-generated from it — add streams there, not as bare strings
+- **Signal payloads** are JSON with `ensure_ascii=False`; keep schema stable across producer/consumer
+- **API response envelopes** use consistent fields (`accepted`, `task_id`, `message`)
+- **Robot status** is event-driven: `BaseRobot` calls `status_callback` on every `emit()` and `signals_in` increment; a 30s heartbeat in `RobotTask` provides liveness confirmation
+
+## Robot Development
+
+### Adding a Python Robot
+Create `pm_sports_bots/robots/my_bot/` with `__init__.py` and `robot.py`. `TaskComposer` auto-discovers all `*_bot/` directories — no manual registration needed.
+
+```python
+class MyBot(BaseRobot):
+    robot_type = "my_bot"           # Must match directory name exactly
+    input_streams = [StreamName.DATA]
+    output_streams = [StreamName.OUTPUT]
+    status_broadcast_min_interval = 2.0  # Throttle for high-frequency bots
+
+    async def setup(self) -> None:
+        self._loop_task = asyncio.create_task(self._my_loop())
+
+    async def teardown(self) -> None:
+        self._loop_task.cancel()
+        await asyncio.gather(self._loop_task, return_exceptions=True)
+
+    async def on_signal(self, stream: str, signal: Signal) -> None:
+        await self.emit(StreamName.OUTPUT, SignalType.PROCESS_RESULT, {...})
+
+    def get_runtime_metrics(self) -> dict[str, Any]:
+        return {"custom_counter": self._counter}  # Sent to frontend with status
+```
+
+### Adding a Rust Robot
+Subclass `RustRobotProxy`. The Rust binary communicates directly with Redis; Python only manages the process lifecycle.
+
+```python
+class TradingBot(RustRobotProxy):
+    robot_type = "trading_bot"
+    rust_binary = "/path/to/target/release/trading-bot"
+    input_streams = [StreamName.DATA]
+    output_streams = [StreamName.OUTPUT]
+```
+
+The Rust process receives `TASK_ID`, `REDIS_URL`, `INPUT_STREAMS`, `OUTPUT_STREAMS`, and `BOT_*` env vars (simple-typed config fields). It must write `robot_start`/`robot_stop`/`robot_error` signals to the control stream and respond to `SIGTERM` for graceful shutdown.
+
+### Task Robot Spec (`custom_config.robots`)
+When creating a task, specify robots via `custom_config.robots`:
+```json
+{
+  "robots": [
+    "ticker_bot",
+    {"type": "transform_bot", "config": {"key": "value"}},
+    {"type": "disabled_bot", "enabled": false}
+  ]
+}
+```
+If `custom_config.robots` is omitted, defaults to `ticker_bot` + `transform_bot`.
 
 ## Code Conventions
 
