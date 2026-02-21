@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import RobotAvatar from "./RobotAvatar.vue";
 import type { Expression } from "./RobotAvatar.vue";
 import { Card } from "@/components/ui/card";
@@ -13,6 +13,7 @@ interface RobotWithPosition extends RobotState {
 const props = defineProps<{
   robot: RobotWithPosition;
   scale: number;
+  motionMode?: "full" | "reduced" | "off";
 }>();
 
 const emit = defineEmits<{
@@ -140,8 +141,42 @@ const genericEntries = computed(() => {
 // --- 表情动画 ---
 const expression = ref<Expression>("neutral");
 let expressionTimer: ReturnType<typeof setTimeout> | null = null;
+let expressionFollowupTimer: ReturnType<typeof setTimeout> | null = null;
+let lastExpressionAt = 0;
+
+const isMotionReduced = computed(() => props.motionMode === "reduced");
+const isMotionOff = computed(() => props.motionMode === "off");
+
+function clearExpressionTimers() {
+  if (expressionTimer) {
+    clearTimeout(expressionTimer);
+    expressionTimer = null;
+  }
+  if (expressionFollowupTimer) {
+    clearTimeout(expressionFollowupTimer);
+    expressionFollowupTimer = null;
+  }
+}
+
+function canTriggerAnimatedExpression(): boolean {
+  if (props.robot.state === "error" || isMotionOff.value) {
+    return false;
+  }
+
+  const now = Date.now();
+  const throttleMs = isMotionReduced.value ? 900 : 450;
+  if (now - lastExpressionAt < throttleMs) {
+    return false;
+  }
+
+  lastExpressionAt = now;
+  return true;
+}
 
 function setTempExpression(expr: Expression, duration = 1500) {
+  if (isMotionOff.value) {
+    return;
+  }
   if (expressionTimer) clearTimeout(expressionTimer);
   expression.value = expr;
   expressionTimer = setTimeout(() => {
@@ -158,7 +193,7 @@ watch(
   () => props.robot.state,
   (state) => {
     if (state === "error") {
-      if (expressionTimer) clearTimeout(expressionTimer);
+      clearExpressionTimers();
       expression.value = "error";
     } else if (expression.value === "error") {
       expression.value = "neutral";
@@ -171,13 +206,17 @@ watch(
 watch(
   () => props.robot.signals_in,
   (newVal, oldVal) => {
-    if (oldVal != null && newVal !== oldVal && props.robot.state !== "error") {
-      setTempExpression("receiving", 1200);
-      setTimeout(() => {
-        if (props.robot.state !== "error" && expression.value === "receiving") {
-          setTempExpression("happy", 800);
-        }
-      }, 1200);
+    if (oldVal != null && newVal !== oldVal && canTriggerAnimatedExpression()) {
+      const duration = isMotionReduced.value ? 700 : 1200;
+      setTempExpression("receiving", duration);
+      if (!isMotionReduced.value) {
+        expressionFollowupTimer = setTimeout(() => {
+          if (props.robot.state !== "error" && expression.value === "receiving") {
+            setTempExpression("happy", 800);
+          }
+          expressionFollowupTimer = null;
+        }, duration);
+      }
     }
   }
 );
@@ -186,17 +225,35 @@ watch(
 watch(
   () => props.robot.signals_out,
   (newVal, oldVal) => {
-    if (oldVal != null && newVal !== oldVal && props.robot.state !== "error") {
-      setTempExpression("sending", 1200);
-      // sending 结束后短暂 happy
-      setTimeout(() => {
-        if (props.robot.state !== "error" && expression.value === "sending") {
-          setTempExpression("happy", 800);
-        }
-      }, 1200);
+    if (oldVal != null && newVal !== oldVal && canTriggerAnimatedExpression()) {
+      const duration = isMotionReduced.value ? 700 : 1200;
+      setTempExpression("sending", duration);
+      if (!isMotionReduced.value) {
+        expressionFollowupTimer = setTimeout(() => {
+          if (props.robot.state !== "error" && expression.value === "sending") {
+            setTempExpression("happy", 800);
+          }
+          expressionFollowupTimer = null;
+        }, duration);
+      }
     }
   }
 );
+
+watch(
+  () => props.motionMode,
+  (mode) => {
+    if (mode === "off" && props.robot.state !== "error") {
+      clearExpressionTimers();
+      expression.value = "neutral";
+    }
+  },
+  { immediate: true }
+);
+
+onBeforeUnmount(() => {
+  clearExpressionTimers();
+});
 </script>
 
 <template>
@@ -216,6 +273,7 @@ watch(
       <RobotAvatar
         :color="colorHex"
         :color-scheme="themeStore.colorScheme"
+        :motion-mode="props.motionMode || 'full'"
         :state="robot.state"
         :uid="robot.robot_type"
         :expression="expression"

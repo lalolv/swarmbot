@@ -16,9 +16,18 @@ const props = defineProps<{
   size?: number;
   /** 表情类型 */
   expression?: Expression;
+  /** 动效级别：full / reduced / off */
+  motionMode?: "full" | "reduced" | "off";
 }>();
 
 const expr = computed(() => props.expression || "neutral");
+const isMotionFull = computed(() => (props.motionMode || "full") === "full");
+const displayExpr = computed<Expression>(() => {
+  if ((props.motionMode || "full") === "off" && expr.value !== "error") {
+    return "neutral";
+  }
+  return expr.value;
+});
 const neutralBlink = ref(false);
 
 let blinkScheduleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -58,9 +67,9 @@ function stopNeutralBlinkLoop(): void {
 }
 
 watch(
-  expr,
+  displayExpr,
   (value) => {
-    if (value === "neutral") {
+    if (value === "neutral" && isMotionFull.value) {
       startNeutralBlinkLoop();
       return;
     }
@@ -69,8 +78,16 @@ watch(
   { immediate: true }
 );
 
+watch(isMotionFull, (enabled) => {
+  if (enabled && displayExpr.value === "neutral") {
+    startNeutralBlinkLoop();
+    return;
+  }
+  stopNeutralBlinkLoop();
+});
+
 onMounted(() => {
-  if (expr.value === "neutral") {
+  if (displayExpr.value === "neutral" && isMotionFull.value) {
     startNeutralBlinkLoop();
   }
 });
@@ -177,23 +194,23 @@ const svgSize = computed(() => 44 * (props.size || 1));
 
       <rect x="10" y="13" width="24" height="20" rx="6" :fill="palette.face" :stroke="palette.body" stroke-width="2.8" />
 
-      <g class="robot-eyes" :class="`eyes-${expr}`">
-        <template v-if="expr === 'receiving'">
+      <g class="robot-eyes" :class="isMotionFull ? `eyes-${displayExpr}` : ''">
+        <template v-if="displayExpr === 'receiving'">
           <circle cx="17.9" cy="23" r="2.5" :fill="palette.eyeBlock" />
           <circle cx="27.3" cy="23" r="1.35" :fill="palette.eyeLine" />
         </template>
 
-        <template v-else-if="expr === 'sending'">
+        <template v-else-if="displayExpr === 'sending'">
           <rect x="14.3" y="22.1" width="7.2" height="1.7" rx="0.85" :fill="palette.eyeBlock" />
           <rect x="23.7" y="22.25" width="7.2" height="1.5" rx="0.75" :fill="palette.eyeLine" />
         </template>
 
-        <template v-else-if="expr === 'happy'">
+        <template v-else-if="displayExpr === 'happy'">
           <path d="M14.5 23.6Q17.9 20.7 21.3 23.6" :stroke="palette.eyeBlock" stroke-width="1.5" stroke-linecap="round" fill="none" />
           <path d="M24 23.6Q27.3 20.9 30.6 23.6" :stroke="palette.eyeLine" stroke-width="1.5" stroke-linecap="round" fill="none" />
         </template>
 
-        <template v-else-if="expr === 'error'">
+        <template v-else-if="displayExpr === 'error'">
           <g :stroke="palette.eyeBlock" stroke-width="1.3" stroke-linecap="round">
             <line x1="15" y1="21.1" x2="20.8" y2="24.9" />
             <line x1="20.8" y1="21.1" x2="15" y2="24.9" />
@@ -223,8 +240,8 @@ const svgSize = computed(() => 44 * (props.size || 1));
         :fill="palette.accentDot"
         class="antenna-dot"
         :class="{
-          'antenna-receiving': expr === 'receiving',
-          'antenna-sending': expr === 'sending',
+          'antenna-receiving': isMotionFull && displayExpr === 'receiving',
+          'antenna-sending': isMotionFull && displayExpr === 'sending',
         }"
       />
     </svg>

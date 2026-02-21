@@ -116,6 +116,17 @@ const displayRobots = computed<DisplayRobot[]>(() => {
   }));
 });
 
+const motionMode = computed<"full" | "reduced" | "off">(() => {
+  const count = displayRobots.value.length;
+  if (count >= 60) {
+    return "off";
+  }
+  if (count >= 24) {
+    return "reduced";
+  }
+  return "full";
+});
+
 // Methods
 function onMouseDown(e: MouseEvent) {
   if (
@@ -293,6 +304,7 @@ defineExpose({ focusRobot, clearTaskPositions });
         :key="robot.robot_type"
         :robot="robot"
         :scale="transform.scale"
+        :motion-mode="motionMode"
         @move="(dx: number, dy: number) => onRobotMove(robot.robot_type, dx, dy)"
         @move-end="onRobotMoveEnd"
       />
