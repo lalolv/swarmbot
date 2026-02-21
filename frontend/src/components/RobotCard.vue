@@ -213,7 +213,13 @@ watch(
   >
     <!-- Header -->
     <div class="flex items-center gap-3 mb-3">
-      <RobotAvatar :color="colorHex" :state="robot.state" :uid="robot.robot_type" :expression="expression" />
+      <RobotAvatar
+        :color="colorHex"
+        :color-scheme="themeStore.colorScheme"
+        :state="robot.state"
+        :uid="robot.robot_type"
+        :expression="expression"
+      />
 
       <div class="flex-1 min-w-0">
         <h4 class="font-display font-bold text-foreground text-sm truncate">
