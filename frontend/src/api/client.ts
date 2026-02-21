@@ -84,15 +84,21 @@ export async function createTask(payload: CreateTaskPayload): Promise<CreateTask
   });
 }
 
-export async function cancelTask(taskId: string): Promise<unknown> {
-  return requestJson(`/api/v1/tasks/${taskId}?purge=false`, {
+export async function deleteTask(taskId: string): Promise<unknown> {
+  return requestJson(`/api/v1/tasks/${taskId}`, {
     method: "DELETE",
   });
 }
 
-export async function purgeTask(taskId: string): Promise<unknown> {
-  return requestJson(`/api/v1/tasks/${taskId}?purge=true`, {
-    method: "DELETE",
+export async function sleepTask(taskId: string): Promise<unknown> {
+  return requestJson(`/api/v1/tasks/${taskId}/sleep`, {
+    method: "POST",
+  });
+}
+
+export async function wakeTask(taskId: string): Promise<unknown> {
+  return requestJson(`/api/v1/tasks/${taskId}/wake`, {
+    method: "POST",
   });
 }
 

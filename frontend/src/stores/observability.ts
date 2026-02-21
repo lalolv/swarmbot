@@ -1,13 +1,14 @@
 import { defineStore } from "pinia";
 
 import {
-  cancelTask,
   createTask,
   createTaskEventSource,
+  deleteTask as apiDeleteTask,
   fetchRobotTypes,
   fetchTaskDetail,
   fetchTasks,
-  purgeTask,
+  sleepTask as apiSleepTask,
+  wakeTask as apiWakeTask,
   type TaskItem,
   type TaskDetail,
   type CreateTaskPayload,
@@ -182,6 +183,13 @@ export const useObservabilityStore = defineStore("observability", {
       this.robots = {};
       this.upsertRobotsFromDetail(detail);
 
+      // 静止状态无需 SSE 推送
+      const STATIC_STATES = new Set(["sleeping", "completed", "failed", "cancelled"]);
+      if (STATIC_STATES.has(this.taskState)) {
+        this.connectionState = "ended";
+        return;
+      }
+
       const source = createTaskEventSource(taskId, true);
       source.onopen = () => {
         this.connectionState = "connected";
@@ -204,20 +212,40 @@ export const useObservabilityStore = defineStore("observability", {
       this._source = source;
     },
 
-    async stopTask(taskId: string) {
+    async sleepTask(taskId: string) {
       if (!taskId) {
         throw new Error("请先选择任务");
       }
-      const result = await cancelTask(taskId);
+      const result = await apiSleepTask(taskId);
       await this.refreshTasks();
       return result;
+    },
+
+    async wakeTask(taskId: string) {
+      if (!taskId) {
+        throw new Error("请先选择任务");
+      }
+      await apiWakeTask(taskId);
+      // 轮询等待 worker 将状态从 sleeping 切换到 running（最多 5s）
+      // 必须等状态变为 running 再建 SSE，否则 startMonitoring 会因
+      // STATIC_STATES 检查而提前返回，导致 SSE 永远不建立
+      for (let i = 0; i < 17; i++) {
+        await sleep(300);
+        try {
+          const detail = await fetchTaskDetail(taskId);
+          if (detail?.status?.state === "running") break;
+        } catch {
+          // 忽略，继续等待
+        }
+      }
+      await this.startMonitoring(taskId);
     },
 
     async cleanupTask(taskId: string) {
       if (!taskId) {
         throw new Error("请先选择任务");
       }
-      const result = await purgeTask(taskId);
+      const result = await apiDeleteTask(taskId);
       if (this.monitorTaskId === taskId) {
         this.stopMonitoring();
         this.taskState = "idle";
@@ -305,12 +333,18 @@ export const useObservabilityStore = defineStore("observability", {
       }
 
       if (eventType === "error") {
-        this.lastError = payload.message || "SSE stream error";
+        // payload.message 为空说明是连接关闭触发的 error 事件，非业务错误，忽略
+        const message = payload.message as string | undefined;
+        if (message) {
+          this.lastError = message;
+        }
       }
 
       if (eventType === "task_end") {
         this.taskState = payload.state || this.taskState;
         this.connectionState = "ended";
+        // 主动关闭 EventSource，防止浏览器自动重连触发 connection error
+        this.stopMonitoring();
       }
     },
 

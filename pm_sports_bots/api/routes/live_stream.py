@@ -30,8 +30,8 @@ async def subscribe_task(
 
     status = TaskStatus.from_json(data)
 
-    # 已终结的任务直接返回最终状态
-    if status.state in (TaskState.COMPLETED, TaskState.CANCELLED, TaskState.FAILED):
+    # 已终结的任务直接返回最终状态（含休眠，无需持续推送）
+    if status.state in (TaskState.COMPLETED, TaskState.CANCELLED, TaskState.FAILED, TaskState.SLEEPING):
 
         async def final_event() -> AsyncGenerator[str, None]:
             payload = {
@@ -88,6 +88,9 @@ async def _subscribe_task_via_streams(
     yield _format_sse_event("subscribed", {"task_id": task_id, "source": "streams"})
     yield f"event: task_status\ndata: {status.to_json()}\n\n"
 
+    # 活跃状态集合：只有这两种状态才保持 SSE 连接
+    ACTIVE_STATES = {TaskState.RUNNING, TaskState.PENDING}
+
     while True:
         if await request.is_disconnected():
             break
@@ -97,40 +100,41 @@ async def _subscribe_task_via_streams(
         except Exception as exc:
             logger.error("Streams xread 异常 task={}: {}", task_id, exc)
             error_payload = json.dumps(
-                {
-                    "code": "STREAM_READ_ERROR",
-                    "message": str(exc),
-                    "recoverable": True,
-                },
+                {"code": "STREAM_READ_ERROR", "message": str(exc), "recoverable": True},
                 ensure_ascii=False,
             )
             yield f"event: error\ndata: {error_payload}\n\n"
             continue
 
+        # 每轮检查 Redis status key（权威来源），而非依赖 stream 信号判断终态。
+        # stream 信号是持久化日志，task_end 等历史信号会污染 sleep/wake 后的新连接。
+        current_raw = await redis.get(Channels.task_status(task_id))
+        if current_raw:
+            try:
+                current_state = TaskStatus.from_json(current_raw).state
+                if current_state not in ACTIVE_STATES:
+                    yield _format_sse_event(
+                        "task_end", {"task_id": task_id, "state": current_state.value}
+                    )
+                    return
+            except Exception:
+                pass
+
         if not results:
-            # 心跳
             yield _format_sse_event("heartbeat", {"ts": _now_iso()})
             continue
 
         for stream_key, messages in results:
             stream_name = _parse_stream_name(task_id, stream_key)
             if messages:
-                # 游标推进到本批次末尾
                 streams[stream_key] = messages[-1][0]
 
             for msg_id, fields in messages:
                 event_type, payload = _signal_to_sse(fields)
                 if not event_type:
                     continue
-
-                # event ID 格式: "stream_name|msg_id"
                 event_id = f"{stream_name}|{msg_id}"
                 yield _format_sse_event(event_type, payload, event_id=event_id)
-
-                if fields.get("type") in {"task_end"}:
-                    final_state = str(payload.get("state") or "completed")
-                    yield _format_sse_event("task_end", {"task_id": task_id, "state": final_state})
-                    return
 
 
 def _signal_to_sse(fields: dict[str, str]) -> tuple[str | None, dict]:
@@ -146,7 +150,8 @@ def _signal_to_sse(fields: dict[str, str]) -> tuple[str | None, dict]:
         "data_update": "data_update",
         "process_result": "process_result",
         "task_status": "task_status",
-        "task_end": "task_end",
+        # task_end 不在此映射：终态由 SSE Bridge 轮询 Redis status key 后合成，
+        # 不从 stream 信号转发（stream 日志持久化，历史 task_end 会污染后续连接）
         "robot_status": "robot_status",
         "robot_start": "robot_status",
         "robot_stop": "robot_status",

@@ -35,6 +35,7 @@ class RobotTask:
         self.redis = redis
         self._task: Optional[asyncio.Task] = None
         self._cancelled = False
+        self._sleeping = False
         self._stop_event = asyncio.Event()
         self._reconfigure_event = asyncio.Event()
         self._config_lock = asyncio.Lock()
@@ -43,6 +44,13 @@ class RobotTask:
     def cancel(self) -> None:
         """取消任务。"""
         self._cancelled = True
+        self._stop_event.set()
+        if self._task and not self._task.done():
+            self._task.cancel()
+
+    def sleep(self) -> None:
+        """休眠任务（停止运行但保留 Redis 数据）。"""
+        self._sleeping = True
         self._stop_event.set()
         if self._task and not self._task.done():
             self._task.cancel()
@@ -89,14 +97,20 @@ class RobotTask:
                     logger.info("任务 {} 已热重载机器人", self.task_id)
                 await asyncio.sleep(0.5)
 
-            if self._cancelled:
+            if self._sleeping:
+                status.update_state(TaskState.SLEEPING)
+            elif self._cancelled:
                 status.update_state(TaskState.CANCELLED)
             else:
                 status.update_state(TaskState.COMPLETED)
 
         except asyncio.CancelledError:
-            status.update_state(TaskState.CANCELLED)
-            logger.info("机器人任务 {} 已取消", self.task_id)
+            if self._sleeping:
+                status.update_state(TaskState.SLEEPING)
+                logger.info("机器人任务 {} 已休眠", self.task_id)
+            else:
+                status.update_state(TaskState.CANCELLED)
+                logger.info("机器人任务 {} 已取消", self.task_id)
         except Exception as exc:
             status.update_state(TaskState.FAILED, error=str(exc))
             logger.error("机器人任务 {} 失败: {}", self.task_id, exc)
@@ -117,14 +131,9 @@ class RobotTask:
             await self._composer.stop_all(self.task_id)
             await self._save_status(status)
             await self._publish_status(status)
-            await self._emit_control(
-                "task_end",
-                {
-                    "task_id": self.task_id,
-                    "state": status.state.value,
-                    "timestamp": _now_iso(),
-                },
-            )
+            # task_end 不写入 stream：stream 信号是持久化日志，而任务可以 sleep/wake 多次，
+            # 历史遗留的 task_end 会污染后续 SSE 连接的历史回放。
+            # SSE Bridge 改为直接轮询 Redis status key 来判断终态并合成 task_end 事件。
 
     async def _robot_status_callback(self, status: dict[str, Any]) -> None:
         """机器人状态变更时立即广播（事件驱动，由 BaseRobot 直接调用）。"""

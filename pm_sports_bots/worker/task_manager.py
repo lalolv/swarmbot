@@ -76,15 +76,33 @@ class TaskManager:
         logger.info("任务已创建: {}", task_id)
         return True
 
-    async def cancel_task(self, task_id: str) -> bool:
-        """取消任务。"""
+    async def sleep_task(self, task_id: str) -> bool:
+        """休眠任务（保留 Redis 数据，停止运行）。"""
         task = self._tasks.get(task_id)
         if not task:
-            logger.warning("任务不存在: {}", task_id)
+            logger.warning("任务不存在或未运行，无法休眠: {}", task_id)
+            return False
+        task.sleep()
+        logger.info("任务休眠请求已发送: {}", task_id)
+        return True
+
+    async def wake_task(self, task_id: str) -> bool:
+        """唤醒休眠任务（重新启动运行）。"""
+        if task_id in self._tasks:
+            logger.warning("任务已在运行中: {}", task_id)
             return False
 
-        task.cancel()
-        logger.info("任务取消请求已发送: {}", task_id)
+        config_key = Channels.task_config(task_id)
+        config_data = await self.redis.get(config_key)
+        if not config_data:
+            logger.warning("任务配置不存在，无法唤醒: {}", task_id)
+            return False
+
+        config = TaskConfig.from_json(config_data)
+        task = RobotTask(task_id=task_id, config=config, redis=self.redis)
+        self._tasks[task_id] = task
+        task._task = asyncio.create_task(self._run_task(task_id, task))
+        logger.info("任务已唤醒: {}", task_id)
         return True
 
     async def delete_task(self, task_id: str) -> bool:
@@ -163,7 +181,7 @@ class TaskManager:
             if not status:
                 continue
 
-            if status.state not in (TaskState.PENDING, TaskState.RUNNING, TaskState.CANCELLING):
+            if status.state not in (TaskState.PENDING, TaskState.RUNNING):
                 continue
 
             config_key = Channels.task_config(task_id)
@@ -180,9 +198,6 @@ class TaskManager:
             )
             self._tasks[task_id] = task
             task._task = asyncio.create_task(self._run_task(task_id, task))
-            if status.state == TaskState.CANCELLING:
-                task.cancel()
-
             logger.info("任务已恢复: {}", task_id)
 
     async def _listen_control(self) -> None:
@@ -204,8 +219,9 @@ class TaskManager:
 
         支持的 action:
         - create: 创建新任务
-        - cancel: 取消任务
-        - delete: 删除任务
+        - sleep: 休眠任务（保留数据）
+        - wake: 唤醒休眠任务
+        - delete: 删除任务（物理清理）
         - update_config: 热更新任务配置
         - shutdown: 关闭 Worker
         """
@@ -222,8 +238,11 @@ class TaskManager:
                 config = TaskConfig.from_dict(config_data)
                 await self.create_task(task_id, config)
 
-            elif action == "cancel" and task_id:
-                await self.cancel_task(task_id)
+            elif action == "sleep" and task_id:
+                await self.sleep_task(task_id)
+
+            elif action == "wake" and task_id:
+                await self.wake_task(task_id)
 
             elif action == "delete" and task_id:
                 await self.delete_task(task_id)

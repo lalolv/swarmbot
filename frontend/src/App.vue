@@ -30,6 +30,14 @@ async function handleDeleteTask(taskId: string) {
   canvasRef.value?.clearTaskPositions(taskId);
 }
 
+async function handleSleepTask(taskId: string) {
+  await store.sleepTask(taskId);
+}
+
+async function handleWakeTask(taskId: string) {
+  await store.wakeTask(taskId);
+}
+
 async function handleRefreshTasks() {
   await store.refreshTasks();
 }
@@ -81,6 +89,8 @@ onBeforeUnmount(() => {
       @create-task="handleCreateTask"
       @select-task="handleSelectTask"
       @delete-task="handleDeleteTask"
+      @sleep-task="handleSleepTask"
+      @wake-task="handleWakeTask"
       @refresh-tasks="handleRefreshTasks"
     />
 

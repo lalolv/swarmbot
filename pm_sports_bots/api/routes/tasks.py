@@ -141,7 +141,7 @@ async def update_task(task_id: str, request: Request, body: UpdateTaskRequest) -
     except Exception as exc:
         raise HTTPException(status_code=409, detail=f"Task status broken: {task_id}") from exc
 
-    if status.state not in {TaskState.PENDING, TaskState.RUNNING, TaskState.CANCELLING}:
+    if status.state not in {TaskState.PENDING, TaskState.RUNNING}:
         raise HTTPException(status_code=409, detail=f"Task is not active: {task_id} ({status.state.value})")
 
     patch = dict(body.patch)
@@ -169,21 +169,64 @@ async def update_task(task_id: str, request: Request, body: UpdateTaskRequest) -
 
 
 @router.delete("/{task_id}")
-async def delete_task(task_id: str, request: Request, purge: bool = True) -> dict[str, Any]:
+async def delete_task(task_id: str, request: Request) -> dict[str, Any]:
     redis = _redis_from_request(request)
     exists = await redis.exists(Channels.task_config(task_id)) or await redis.exists(Channels.task_status(task_id))
     if not exists:
         raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
 
-    action = "delete" if purge else "cancel"
-    message = {
-        "action": action,
-        "task_id": task_id,
-    }
+    message = {"action": "delete", "task_id": task_id}
     await redis.publish(Channels.CONTROL, json.dumps(message, ensure_ascii=False))
     return {
         "task_id": task_id,
         "accepted": True,
-        "action": action,
-        "message": "Delete command published" if purge else "Cancel command published",
+        "message": "Delete command published",
+    }
+
+
+@router.post("/{task_id}/sleep")
+async def sleep_task(task_id: str, request: Request) -> dict[str, Any]:
+    redis = _redis_from_request(request)
+    status_raw = await redis.get(Channels.task_status(task_id))
+    if not status_raw:
+        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
+
+    try:
+        status = TaskStatus.from_json(status_raw)
+    except Exception as exc:
+        raise HTTPException(status_code=409, detail=f"Task status broken: {task_id}") from exc
+
+    if status.state != TaskState.RUNNING:
+        raise HTTPException(status_code=409, detail=f"Task is not running: {task_id} ({status.state.value})")
+
+    message = {"action": "sleep", "task_id": task_id}
+    await redis.publish(Channels.CONTROL, json.dumps(message, ensure_ascii=False))
+    return {
+        "task_id": task_id,
+        "accepted": True,
+        "message": "Sleep command published",
+    }
+
+
+@router.post("/{task_id}/wake")
+async def wake_task(task_id: str, request: Request) -> dict[str, Any]:
+    redis = _redis_from_request(request)
+    status_raw = await redis.get(Channels.task_status(task_id))
+    if not status_raw:
+        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
+
+    try:
+        status = TaskStatus.from_json(status_raw)
+    except Exception as exc:
+        raise HTTPException(status_code=409, detail=f"Task status broken: {task_id}") from exc
+
+    if status.state != TaskState.SLEEPING:
+        raise HTTPException(status_code=409, detail=f"Task is not sleeping: {task_id} ({status.state.value})")
+
+    message = {"action": "wake", "task_id": task_id}
+    await redis.publish(Channels.CONTROL, json.dumps(message, ensure_ascii=False))
+    return {
+        "task_id": task_id,
+        "accepted": True,
+        "message": "Wake command published",
     }

@@ -96,11 +96,30 @@ body {
     @apply w-2 h-2 rounded-full;
   }
 
-  .status-running {
-    background: #00ff88;
-    color: #00ff88;
-    box-shadow: 0 0 10px #00ff88;
+  /* running / sleeping — 亮色模式：深色调 + 细环形 halo，无霓虹辉光 */
+  [data-color-scheme="light"] .status-running {
+    background: #059669;
+    box-shadow: 0 0 0 2.5px #05966930;
     animation: pulse 2s ease-in-out infinite;
+  }
+
+  [data-color-scheme="light"] .status-sleeping {
+    background: #b45309;
+    box-shadow: 0 0 0 2.5px #b4530930;
+    animation: pulse 3s ease-in-out infinite;
+  }
+
+  /* running / sleeping — 暗色模式：亮色调 + 霓虹辉光 */
+  [data-color-scheme="dark"] .status-running {
+    background: #34d399;
+    box-shadow: 0 0 10px #34d39980;
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  [data-color-scheme="dark"] .status-sleeping {
+    background: #fbbf24;
+    box-shadow: 0 0 8px #fbbf2480;
+    animation: pulse 3s ease-in-out infinite;
   }
 
   .status-idle {

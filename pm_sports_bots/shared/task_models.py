@@ -11,10 +11,10 @@ class TaskState(StrEnum):
     """任务状态枚举"""
 
     PENDING = "pending"        # 等待启动
-    CANCELLING = "cancelling"  # 取消中
     RUNNING = "running"        # 运行中
+    SLEEPING = "sleeping"      # 休眠（数据保留，不运行）
     COMPLETED = "completed"    # 正常完成
-    CANCELLED = "cancelled"    # 用户取消
+    CANCELLED = "cancelled"    # 用户取消（物理删除前瞬态）
     FAILED = "failed"          # 异常失败
 
 

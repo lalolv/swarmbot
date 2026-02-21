@@ -15,6 +15,8 @@ const emit = defineEmits<{
   "create-task": [form: any];
   "select-task": [taskId: string];
   "delete-task": [taskId: string];
+  "sleep-task": [taskId: string];
+  "wake-task": [taskId: string];
   "refresh-tasks": [];
 }>();
 
@@ -34,6 +36,17 @@ const createForm = reactive({
 
 // Computed
 const canDelete = computed(() => !!props.currentTaskId);
+const currentTask = computed(() => props.tasks.find(t => t.task_id === props.currentTaskId));
+const currentTaskState = computed(() => currentTask.value?.status?.state || "");
+
+function getStateDotClass(state: string): string {
+  switch (state) {
+    case "running": return "status-running";
+    case "sleeping": return "status-sleeping";
+    case "error": return "status-error";
+    default: return "status-idle";
+  }
+}
 
 // Methods
 function toggleRobot(robotType: string) {
@@ -160,7 +173,7 @@ async function deleteTask() {
         >
           <span
             class="status-dot mt-1.5 shrink-0"
-            :class="task.status?.state === 'running' ? 'status-running' : 'status-idle'"
+            :class="getStateDotClass(task.status?.state || '')"
           ></span>
           <div class="flex-1 min-w-0">
             <div class="text-sm font-semibold text-foreground truncate">
@@ -185,18 +198,52 @@ async function deleteTask() {
         <div class="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider px-1 mb-2">
           当前任务：<span class="font-mono text-foreground">{{ currentTaskId }}</span>
         </div>
-        <Button
-          variant="destructive"
-          size="sm"
-          class="w-full"
-          @click="deleteTask"
-        >
-          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
-          删除任务
-        </Button>
+
+        <div class="flex gap-2">
+          <!-- 休眠按钮（仅 running 状态） -->
+          <Button
+            v-if="currentTaskState === 'running'"
+            variant="outline"
+            size="sm"
+            class="flex-1 border-amber-600/50 text-amber-600 hover:bg-amber-600/10"
+            @click="emit('sleep-task', currentTaskId)"
+          >
+            <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+            </svg>
+            休眠
+          </Button>
+
+          <!-- 唤醒按钮（仅 sleeping 状态） -->
+          <Button
+            v-if="currentTaskState === 'sleeping'"
+            variant="outline"
+            size="sm"
+            class="flex-1 border-emerald-600/50 text-emerald-600 hover:bg-emerald-600/10"
+            @click="emit('wake-task', currentTaskId)"
+          >
+            <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+            </svg>
+            唤醒
+          </Button>
+
+          <!-- 删除按钮 -->
+          <Button
+            variant="destructive"
+            size="sm"
+            :class="currentTaskState === 'running' || currentTaskState === 'sleeping' ? 'flex-1' : 'w-full'"
+            @click="deleteTask"
+          >
+            <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            删除
+          </Button>
+        </div>
       </div>
     </div>
   </Transition>
