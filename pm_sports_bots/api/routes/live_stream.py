@@ -1,6 +1,8 @@
 """SSE Bridge — 将 Redis Streams 桥接为 Server-Sent Events。"""
 
 import json
+import asyncio
+import time
 from typing import AsyncGenerator
 
 from fastapi import APIRouter, HTTPException, Request
@@ -11,6 +13,7 @@ from pm_sports_bots.shared import Channels, RedisClient, TaskState, TaskStatus
 
 
 router = APIRouter(prefix="/api/v1/live", tags=["live"])
+SSE_CONNECTION_MAX_SECONDS = 25
 
 
 @router.get("/subscribe/{task_id}")
@@ -109,14 +112,26 @@ async def _subscribe_task_via_streams(
 
     # 活跃状态集合：只有这两种状态才保持 SSE 连接
     ACTIVE_STATES = {TaskState.RUNNING, TaskState.PENDING}
+    started_at = time.monotonic()
 
     while True:
-        if await request.is_disconnected():
+        if await request.is_disconnected() or _is_app_shutting_down(request):
             break
+        if time.monotonic() - started_at >= SSE_CONNECTION_MAX_SECONDS:
+            yield _format_sse_event("stream_rotate", {"task_id": task_id, "reason": "max_connection_age"})
+            return
 
         try:
-            results = await redis.xread(streams=streams, count=100, block=1000)
+            results = await redis.xread(streams=streams, count=100, block=500)
+        except asyncio.CancelledError:
+            logger.info("任务 SSE 连接被取消 task={}", task_id)
+            return
+        except RuntimeError as exc:
+            logger.info("任务 SSE 连接结束（Redis 已关闭）task={}: {}", task_id, exc)
+            return
         except Exception as exc:
+            if _is_app_shutting_down(request):
+                return
             logger.error("Streams xread 异常 task={}: {}", task_id, exc)
             error_payload = json.dumps(
                 {"code": "STREAM_READ_ERROR", "message": str(exc), "recoverable": True},
@@ -173,14 +188,26 @@ async def _subscribe_tasks_events(
             streams[stream_key] = last_msg_id
 
     yield _format_sse_event("subscribed", {"scope": "tasks", "source": "streams"})
+    started_at = time.monotonic()
 
     while True:
-        if await request.is_disconnected():
+        if await request.is_disconnected() or _is_app_shutting_down(request):
             break
+        if time.monotonic() - started_at >= SSE_CONNECTION_MAX_SECONDS:
+            yield _format_sse_event("stream_rotate", {"scope": "tasks", "reason": "max_connection_age"})
+            return
 
         try:
-            results = await redis.xread(streams=streams, count=200, block=1000)
+            results = await redis.xread(streams=streams, count=200, block=500)
+        except asyncio.CancelledError:
+            logger.info("任务聚合 SSE 连接被取消")
+            return
+        except RuntimeError as exc:
+            logger.info("任务聚合 SSE 连接结束（Redis 已关闭）: {}", exc)
+            return
         except Exception as exc:
+            if _is_app_shutting_down(request):
+                return
             logger.error("任务事件流 xread 异常: {}", exc)
             yield _format_sse_event(
                 "error",
@@ -316,6 +343,10 @@ def _parse_last_event_id(value: str) -> tuple[str | None, str | None]:
     if not stream_name or not msg_id:
         return None, None
     return stream_name, msg_id
+
+
+def _is_app_shutting_down(request: Request) -> bool:
+    return bool(getattr(request.app.state, "shutting_down", False))
 
 
 def _now_iso() -> str:

@@ -130,6 +130,7 @@ class TaskManager:
 
         config_key = Channels.task_config(task_id)
         status_key = Channels.task_status(task_id)
+        version_key = Channels.task_version(task_id)
         config_raw = await self.redis.get(config_key)
         status_raw = await self.redis.get(status_key)
 
@@ -145,13 +146,13 @@ class TaskManager:
             except Exception:
                 user_id = ""
 
+        await self._emit_task_projection_deleted(task_id)
+
         stream_keys = [Channels.task_stream(task_id, stream) for stream in Channels.ALL_STREAMS]
-        removed_key_count = await self.redis.delete(config_key, status_key, *stream_keys)
+        removed_key_count = await self.redis.delete(config_key, status_key, version_key, *stream_keys)
         removed_task_count = await self.redis.srem(Channels.all_tasks(), task_id)
         if user_id:
             await self.redis.srem(Channels.user_tasks(user_id), task_id)
-
-        await self._emit_task_projection_deleted(task_id)
 
         logger.info(
             "任务已删除: task={} keys_removed={} task_set_removed={}",
@@ -353,6 +354,14 @@ class TaskManager:
                 )
             except asyncio.CancelledError:
                 break
+            except ResponseError as exc:
+                if "NOGROUP" in str(exc):
+                    logger.warning("命令消费组丢失，正在重建: {}", exc)
+                    await self._ensure_command_group()
+                    continue
+                logger.error("命令流监听异常: {}", exc)
+                await asyncio.sleep(1.0)
+                continue
             except Exception as exc:
                 logger.error("命令流监听异常: {}", exc)
                 await asyncio.sleep(1.0)
