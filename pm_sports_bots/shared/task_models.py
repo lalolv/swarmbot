@@ -19,6 +19,48 @@ class TaskState(StrEnum):
 
 
 @dataclass
+class TaskRobotSpec:
+    """任务中的机器人声明。"""
+
+    type: str
+    enabled: bool = True
+    config: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "type": self.type,
+            "enabled": self.enabled,
+            "config": self.config,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "TaskRobotSpec":
+        robot_type = data.get("type")
+        if not isinstance(robot_type, str) or not robot_type:
+            raise ValueError("Robot spec must include non-empty 'type'")
+
+        enabled = data.get("enabled", True)
+        if not isinstance(enabled, bool):
+            raise ValueError(f"Robot spec '{robot_type}': 'enabled' must be boolean")
+
+        config = data.get("config") or {}
+        if not isinstance(config, dict):
+            raise ValueError(f"Robot spec '{robot_type}': 'config' must be object")
+
+        return cls(type=robot_type, enabled=enabled, config=config)
+
+    @classmethod
+    def from_any(cls, spec: str | dict[str, Any]) -> "TaskRobotSpec":
+        if isinstance(spec, str):
+            if not spec:
+                raise ValueError("Robot spec string must be non-empty")
+            return cls(type=spec)
+        if isinstance(spec, dict):
+            return cls.from_dict(spec)
+        raise ValueError("Robot spec must be string or object")
+
+
+@dataclass
 class TaskConfig:
     """任务配置
 
@@ -29,11 +71,14 @@ class TaskConfig:
     user_id: str = ""
     name: str = ""
     description: str = ""
+    robots: list[TaskRobotSpec] = field(default_factory=list)
     custom_config: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         """转换为字典"""
-        return asdict(self)
+        payload = asdict(self)
+        payload["robots"] = [robot.to_dict() for robot in self.robots]
+        return payload
 
     def to_json(self) -> str:
         """序列化为 JSON"""
@@ -42,12 +87,30 @@ class TaskConfig:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "TaskConfig":
         """从字典创建"""
+        robots_raw = data.get("robots")
+        if robots_raw is None:
+            legacy_custom_config = data.get("custom_config") or {}
+            if isinstance(legacy_custom_config, dict):
+                robots_raw = legacy_custom_config.get("robots")
+
+        if not isinstance(robots_raw, list):
+            raise ValueError("Task config requires 'robots' as a list")
+
+        robots = [TaskRobotSpec.from_any(item) for item in robots_raw]
+        if not robots:
+            raise ValueError("Task config requires at least one robot")
+
+        custom_config = data.get("custom_config") or {}
+        if not isinstance(custom_config, dict):
+            raise ValueError("Task config 'custom_config' must be an object")
+
         return cls(
             task_id=str(data.get("task_id", "")),
             user_id=str(data.get("user_id", "")),
             name=str(data.get("name", "")),
             description=str(data.get("description", "")),
-            custom_config=data.get("custom_config") or {},
+            robots=robots,
+            custom_config=custom_config,
         )
 
     @classmethod

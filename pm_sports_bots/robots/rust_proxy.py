@@ -47,10 +47,17 @@ class RustRobotProxy(BaseRobot):
         self,
         task_id: str,
         redis: RedisClient,
-        config: dict[str, Any] | None = None,
+        task_config: dict[str, Any] | None = None,
+        robot_config: dict[str, Any] | None = None,
         status_callback: StatusCallback | None = None,
     ):
-        super().__init__(task_id, redis, config, status_callback)
+        super().__init__(
+            task_id=task_id,
+            redis=redis,
+            task_config=task_config,
+            robot_config=robot_config,
+            status_callback=status_callback,
+        )
         self._process: asyncio.subprocess.Process | None = None
         self._monitor_task: asyncio.Task | None = None
         self._sync_task: asyncio.Task | None = None
@@ -108,7 +115,7 @@ class RustRobotProxy(BaseRobot):
         # 将简单类型的 config 字段展开为 BOT_* 环境变量
         bot_env = {
             f"BOT_{k.upper()}": str(v)
-            for k, v in self.config.items()
+            for k, v in self.robot_config.items()
             if isinstance(v, (str, int, float, bool))
         }
 

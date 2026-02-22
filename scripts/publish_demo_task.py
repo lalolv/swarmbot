@@ -17,12 +17,23 @@ async def main() -> None:
         "task_id": "demo-task-1",
         "user_id": "u1",
         "robots": [
-            "sample_producer",
-            "sample_consumer",
+            {
+                "type": "ticker_bot",
+                "config": {
+                    "poll_interval": 3.0,
+                    "min_value": 0.0,
+                    "max_value": 100.0,
+                },
+            },
+            {
+                "type": "transform_bot",
+                "config": {
+                    "multiplier": 1.5,
+                    "offset": 0.0,
+                },
+            },
         ],
-        "custom_config": {
-            "poll_interval": 3.0,
-        },
+        "custom_config": {},
     }
 
     req = request.Request(

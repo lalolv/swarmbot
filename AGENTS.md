@@ -114,6 +114,7 @@ Note: there is no `tests/` directory in the current scaffold. Keep the single-te
 - Keep request and response models explicit.
 - Maintain consistent response envelopes (`accepted`, `task_id`, `message`, etc.).
 - Keep route modules thin; move orchestration/business logic to worker/robots/shared layers.
+- Task creation now requires top-level `robots` (at least one item); do not hide robot specs under `custom_config`.
 
 ### Robot Patterns
 - New robots must extend `BaseRobot`.
@@ -146,6 +147,7 @@ Note: there is no `tests/` directory in the current scaffold. Keep the single-te
 
 ## 10) Common Pitfalls to Avoid
 - Do not bypass `TaskComposer` registration when introducing new robot types.
+- Do not rely on implicit default robots; each task must declare `robots` explicitly.
 - Do not add new Redis stream names without updating `Channels.ALL_STREAMS`.
 - Do not change response envelope fields without checking existing API clients.
 - Do not introduce blocking SDK/network calls directly inside async loops.

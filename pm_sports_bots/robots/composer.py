@@ -13,7 +13,7 @@ from typing import Any
 
 from loguru import logger
 
-from pm_sports_bots.shared import RedisClient, TaskConfig
+from pm_sports_bots.shared import RedisClient, TaskConfig, TaskRobotSpec
 
 from .base import BaseRobot, StatusCallback
 
@@ -73,39 +73,33 @@ class TaskComposer:
         status_callback: StatusCallback | None = None,
     ) -> list[BaseRobot]:
         """根据配置创建任务对应的机器人列表。
-
-        未指定 custom_config.robots 时，默认启动 sample_producer + sample_consumer。
         """
-        cfg = config.to_dict()
-        custom_config = cfg.get("custom_config") or {}
-        configured_robots = custom_config.get("robots")
-
+        task_config = config.to_dict()
+        configured_robots = config.robots
         robots: list[BaseRobot] = []
-        if configured_robots is None:
-            for robot_type in ("ticker_bot", "transform_bot"):
-                robot_cls = self.ROBOT_REGISTRY.get(robot_type)
-                if robot_cls:
-                    robots.append(robot_cls(task_id, self.redis, cfg, status_callback))
-        else:
-            if not isinstance(configured_robots, list):
-                raise ValueError("custom_config.robots must be a list")
 
-            for index, spec in enumerate(configured_robots):
-                parsed = self._parse_robot_spec(spec, index)
-                if parsed is None:
-                    continue
-                robot_type, robot_config = parsed
-                robot_cls = self.ROBOT_REGISTRY.get(robot_type)
-                if robot_cls is None:
-                    available = ", ".join(self.available_robot_types())
-                    raise ValueError(f"Unknown robot type: {robot_type}. Available: {available}")
+        for index, spec in enumerate(configured_robots):
+            parsed = self._parse_robot_spec(spec, index)
+            if parsed is None:
+                continue
+            robot_type, robot_config = parsed
+            robot_cls = self.ROBOT_REGISTRY.get(robot_type)
+            if robot_cls is None:
+                available = ", ".join(self.available_robot_types())
+                raise ValueError(f"Unknown robot type: {robot_type}. Available: {available}")
 
-                merged_config = dict(cfg)
-                merged_config.update(robot_config)
-                robots.append(robot_cls(task_id, self.redis, merged_config, status_callback))
+            robots.append(
+                robot_cls(
+                    task_id=task_id,
+                    redis=self.redis,
+                    task_config=task_config,
+                    robot_config=robot_config,
+                    status_callback=status_callback,
+                )
+            )
 
-            if not robots:
-                raise ValueError("No robots are enabled for this task")
+        if not robots:
+            raise ValueError("No robots are enabled for this task")
 
         self._robots[task_id] = robots
         logger.info("编排器已创建 {} 个机器人: task={}", len(robots), task_id)
@@ -113,27 +107,16 @@ class TaskComposer:
 
     def _parse_robot_spec(
         self,
-        spec: Any,
+        spec: TaskRobotSpec,
         index: int,
     ) -> tuple[str, dict[str, Any]] | None:
-        if isinstance(spec, str):
-            return spec, {}
+        if not isinstance(spec, TaskRobotSpec):
+            raise ValueError(f"Invalid robot spec at index {index}: expected TaskRobotSpec")
 
-        if not isinstance(spec, dict):
-            raise ValueError(f"Invalid robot spec at index {index}: must be string or object")
-
-        if spec.get("enabled", True) is False:
+        if spec.enabled is False:
             return None
 
-        robot_type = spec.get("type")
-        if not isinstance(robot_type, str) or not robot_type:
-            raise ValueError(f"Invalid robot spec at index {index}: missing 'type'")
-
-        robot_config = spec.get("config") or {}
-        if not isinstance(robot_config, dict):
-            raise ValueError(f"Invalid robot config for {robot_type}: must be object")
-
-        return robot_type, robot_config
+        return spec.type, dict(spec.config)
 
     async def start_all(self, task_id: str) -> list[asyncio.Task[None]]:
         """启动任务的所有机器人。"""

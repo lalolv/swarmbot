@@ -129,16 +129,23 @@ class BaseRobot(ABC):
                 await asyncio.sleep(5.0)
     """
 
+    robot_type: str = ""
+    """机器人类型标识（子类必须覆盖，且与目录名保持一致）。"""
+
     def __init__(
         self,
         task_id: str,
         redis: RedisClient,
-        config: dict[str, Any] | None = None,
+        task_config: dict[str, Any] | None = None,
+        robot_config: dict[str, Any] | None = None,
         status_callback: StatusCallback | None = None,
     ):
         self.task_id = task_id
         self.redis = redis
-        self.config = config or {}
+        self.task_config = task_config or {}
+        self.robot_config = robot_config or {}
+        # 兼容历史机器人实现：旧代码读取 self.config
+        self.config = self.robot_config
         self._state = RobotState.IDLE
         self._signals_in = 0
         self._signals_out = 0
@@ -149,11 +156,6 @@ class BaseRobot(ABC):
         self._last_status_broadcast_at: float = 0.0
 
     # ========== 抽象属性/方法（子类必须实现） ==========
-
-    @property
-    @abstractmethod
-    def robot_type(self) -> str:
-        """机器人类型标识。"""
 
     @abstractmethod
     async def setup(self) -> None:

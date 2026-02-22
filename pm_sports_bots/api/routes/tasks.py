@@ -22,14 +22,34 @@ def _redis_from_request(request: Request) -> RedisClient:
     return redis
 
 
-def _serialize_robot_specs(robots: list[RobotSpec | str]) -> list[dict[str, Any] | str]:
-    serialized: list[dict[str, Any] | str] = []
+def _serialize_robot_specs(robots: list[RobotSpec]) -> list[dict[str, Any]]:
+    serialized: list[dict[str, Any]] = []
     for item in robots:
-        if isinstance(item, str):
-            serialized.append(item)
-        else:
-            serialized.append(item.model_dump())
+        serialized.append(item.model_dump())
     return serialized
+
+
+def _validate_robot_types(robots: list[dict[str, Any]]) -> None:
+    available = set(TaskComposer.available_robot_types())
+    for spec in robots:
+        robot_type = spec.get("type")
+        if robot_type not in available:
+            available_text = ", ".join(sorted(available))
+            raise HTTPException(
+                status_code=422,
+                detail=f"Unknown robot type: {robot_type}. Available: {available_text}",
+            )
+
+
+def _deep_merge_dict(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(base)
+    for key, value in patch.items():
+        current = merged.get(key)
+        if isinstance(current, dict) and isinstance(value, dict):
+            merged[key] = _deep_merge_dict(current, value)
+        else:
+            merged[key] = value
+    return merged
 
 
 async def _load_task_detail(redis: RedisClient, task_id: str) -> dict[str, Any]:
@@ -46,14 +66,12 @@ async def _load_task_detail(redis: RedisClient, task_id: str) -> dict[str, Any]:
             status_payload = None
 
     config_payload: dict[str, Any] | None = None
-    robots_payload: list[dict[str, Any] | str] = []
+    robots_payload: list[dict[str, Any]] = []
     if config_raw:
         try:
             config = TaskConfig.from_json(config_raw)
             config_payload = config.to_dict()
-            robots_raw = config.custom_config.get("robots")
-            if isinstance(robots_raw, list):
-                robots_payload = robots_raw
+            robots_payload = [robot.to_dict() for robot in config.robots]
         except Exception:
             config_payload = None
 
@@ -78,16 +96,16 @@ async def create_task(request: Request, body: CreateTaskRequest) -> dict[str, An
     if await redis.exists(Channels.task_config(task_id)) or await redis.exists(Channels.task_status(task_id)):
         raise HTTPException(status_code=409, detail=f"Task already exists: {task_id}")
 
-    custom_config = dict(body.custom_config)
-    if body.robots is not None:
-        custom_config["robots"] = _serialize_robot_specs(body.robots)
+    serialized_robots = _serialize_robot_specs(body.robots)
+    _validate_robot_types(serialized_robots)
 
     config_payload = {
         "task_id": task_id,
         "user_id": body.user_id,
         "name": body.name,
         "description": body.description,
-        "custom_config": custom_config,
+        "robots": serialized_robots,
+        "custom_config": dict(body.custom_config),
     }
     message = {
         "action": "create",
@@ -144,16 +162,32 @@ async def update_task(task_id: str, request: Request, body: UpdateTaskRequest) -
     if status.state not in {TaskState.PENDING, TaskState.RUNNING}:
         raise HTTPException(status_code=409, detail=f"Task is not active: {task_id} ({status.state.value})")
 
+    config_raw = await redis.get(Channels.task_config(task_id))
+    if not config_raw:
+        raise HTTPException(status_code=409, detail=f"Task config missing: {task_id}")
+
+    try:
+        current_config = TaskConfig.from_json(config_raw)
+    except Exception as exc:
+        raise HTTPException(status_code=409, detail=f"Task config broken: {task_id}") from exc
+
     patch = dict(body.patch)
+    if "robots" in patch:
+        raise HTTPException(status_code=422, detail="Use top-level 'robots' field instead of patch.robots")
+
     if body.robots is not None:
-        custom_patch = patch.get("custom_config") or {}
-        if not isinstance(custom_patch, dict):
-            raise HTTPException(status_code=422, detail="patch.custom_config must be an object")
-        custom_patch["robots"] = _serialize_robot_specs(body.robots)
-        patch["custom_config"] = custom_patch
+        patch["robots"] = _serialize_robot_specs(body.robots)
 
     if not patch:
         raise HTTPException(status_code=422, detail="Empty patch")
+
+    merged_payload = _deep_merge_dict(current_config.to_dict(), patch)
+    try:
+        merged_config = TaskConfig.from_dict(merged_payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    _validate_robot_types([robot.to_dict() for robot in merged_config.robots])
 
     message = {
         "action": "update_config",

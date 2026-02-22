@@ -61,8 +61,8 @@ class TransformBot(BaseRobot):
             )
             return
 
-        coefficient = float(self.config.get("multiplier", 1.5))
-        offset = float(self.config.get("offset", 0.0))
+        coefficient = float(self.robot_config.get("multiplier", 1.5))
+        offset = float(self.robot_config.get("offset", 0.0))
         transformed = round(value * coefficient + offset, 4)
 
         result = {

@@ -40,6 +40,9 @@ uv run python scripts/publish_demo_task.py
 
 ### 6) Task APIs
 
+`robots` 是任务编排的必填字段（至少 1 个），每个元素使用对象格式：
+`{"type": "...", "enabled": true, "config": {...}}`。
+
 Create task:
 
 ```bash
@@ -48,8 +51,11 @@ curl -X POST http://127.0.0.1:8000/api/v1/tasks \
   -d '{
     "task_id": "demo-task-1",
     "user_id": "u1",
-    "robots": ["sample_producer", "sample_consumer"],
-    "custom_config": {"poll_interval": 3.0}
+    "robots": [
+      {"type": "ticker_bot", "config": {"poll_interval": 3.0, "min_value": 0, "max_value": 100}},
+      {"type": "transform_bot", "config": {"multiplier": 1.5, "offset": 0.0}}
+    ],
+    "custom_config": {}
   }'
 ```
 
@@ -58,7 +64,7 @@ Update running task config (supports hot-reload robots):
 ```bash
 curl -X PATCH http://127.0.0.1:8000/api/v1/tasks/demo-task-1 \
   -H 'content-type: application/json' \
-  -d '{"robots": [{"type": "sample_producer", "config": {"poll_interval": 1.0}}]}'
+  -d '{"robots": [{"type": "ticker_bot", "config": {"poll_interval": 1.0}}]}'
 ```
 
 Delete task (purge data):

@@ -140,7 +140,7 @@ export const useObservabilityStore = defineStore("observability", {
         user_id: form.userId || "",
         name: form.name || undefined,
         description: form.description || undefined,
-        robots: selectedRobots,
+        robots: selectedRobots.map((type) => ({ type })),
         custom_config: {},
       };
 
@@ -350,8 +350,7 @@ export const useObservabilityStore = defineStore("observability", {
 
     upsertRobotsFromDetail(detail: TaskDetail) {
       for (const robot of detail?.robots || []) {
-        const robotType =
-          typeof robot === "string" ? robot : (robot as { type: string }).type;
+        const robotType = robot.type;
         if (!robotType) continue;
         const prev = this.robots[robotType] || makeDefaultRobot(robotType);
         this.robots = {

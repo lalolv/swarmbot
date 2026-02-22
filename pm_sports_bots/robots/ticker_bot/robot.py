@@ -40,9 +40,9 @@ class TickerBot(BaseRobot):
     async def _tick_loop(self) -> None:
         """周期性产生随机价格信号。"""
         while not self._cancelled:
-            interval = float(self.config.get("poll_interval", 10.0))
-            min_value = float(self.config.get("min_value", 0.0))
-            max_value = float(self.config.get("max_value", 100.0))
+            interval = float(self.robot_config.get("poll_interval", 10.0))
+            min_value = float(self.robot_config.get("min_value", 0.0))
+            max_value = float(self.robot_config.get("max_value", 100.0))
             random_value = random.uniform(min_value, max_value)
 
             data = {

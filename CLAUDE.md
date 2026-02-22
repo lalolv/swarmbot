@@ -51,7 +51,7 @@ Frontend (`frontend/src/`): Vue 3 app with Pinia store (`stores/observability.js
 ### Task Lifecycle
 1. API creates task → publishes to Redis control channel
 2. Worker's `TaskManager` picks it up → `RobotTask.run()` starts
-3. `TaskComposer.compose()` instantiates robots per `custom_config.robots` (defaults to `ticker_bot` + `transform_bot`)
+3. `TaskComposer.compose()` instantiates robots per `TaskConfig.robots` (`robots` is required, no implicit defaults)
 4. Robots emit signals to task-scoped streams (`pm_sports_bots:task:TASK_ID:stream:NAME`)
 5. SSE bridge streams events to frontend in real-time
 6. PATCH triggers hot-reload (robots stop and restart with new config); DELETE cancels/purges
@@ -101,18 +101,18 @@ class TradingBot(RustRobotProxy):
 
 The Rust process receives `TASK_ID`, `REDIS_URL`, `INPUT_STREAMS`, `OUTPUT_STREAMS`, and `BOT_*` env vars (simple-typed config fields). It must write `robot_start`/`robot_stop`/`robot_error` signals to the control stream and respond to `SIGTERM` for graceful shutdown.
 
-### Task Robot Spec (`custom_config.robots`)
-When creating a task, specify robots via `custom_config.robots`:
+### Task Robot Spec (`robots`)
+When creating a task, specify robots via top-level `robots`:
 ```json
 {
   "robots": [
-    "ticker_bot",
+    {"type": "ticker_bot", "config": {"poll_interval": 3.0}},
     {"type": "transform_bot", "config": {"key": "value"}},
     {"type": "disabled_bot", "enabled": false}
   ]
 }
 ```
-If `custom_config.robots` is omitted, defaults to `ticker_bot` + `transform_bot`.
+`robots` is required and must contain at least one enabled robot.
 
 ## Code Conventions
 

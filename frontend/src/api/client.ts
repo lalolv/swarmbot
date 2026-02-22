@@ -20,7 +20,7 @@ export interface TaskListResponse {
 
 export interface TaskDetail {
   task_id: string;
-  robots: (string | { type: string })[];
+  robots: Array<{ type: string; enabled?: boolean; config?: Record<string, unknown> }>;
   status?: {
     state: string;
     updated_at?: string;
@@ -36,7 +36,7 @@ export interface CreateTaskPayload {
   user_id: string;
   name?: string;
   description?: string;
-  robots: string[];
+  robots: Array<{ type: string; enabled?: boolean; config?: Record<string, unknown> }>;
   custom_config: Record<string, unknown>;
 }
 

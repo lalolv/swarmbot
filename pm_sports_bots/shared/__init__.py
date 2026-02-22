@@ -1,7 +1,7 @@
 """共享模块"""
 
 from .channels import Channels, SignalType, StreamName
-from .task_models import TaskState, TaskStatus, TaskConfig
+from .task_models import TaskState, TaskStatus, TaskConfig, TaskRobotSpec
 from .redis_client import RedisClient, get_redis
 
 __all__ = [
@@ -11,6 +11,7 @@ __all__ = [
     "TaskState",
     "TaskStatus",
     "TaskConfig",
+    "TaskRobotSpec",
     "RedisClient",
     "get_redis",
 ]
