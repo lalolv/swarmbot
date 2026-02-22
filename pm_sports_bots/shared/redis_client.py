@@ -71,6 +71,10 @@ class RedisClient:
         """检查键是否存在"""
         return await self.client.exists(key) > 0
 
+    async def incr(self, key: str) -> int:
+        """自增并返回新值"""
+        return await self.client.incr(key)
+
     # ========== Set 操作 ==========
 
     async def sadd(self, key: str, *values: str) -> int:
@@ -174,6 +178,40 @@ class RedisClient:
     async def xdel(self, stream: str, *ids: str) -> int:
         """删除 Stream 中的消息"""
         return await self.client.xdel(stream, *ids)
+
+    async def xgroup_create(
+        self,
+        stream: str,
+        group: str,
+        id: str = "$",
+        mkstream: bool = False,
+    ) -> None:
+        """创建消费组。"""
+        await self.client.xgroup_create(stream, group, id=id, mkstream=mkstream)
+
+    async def xreadgroup(
+        self,
+        group: str,
+        consumer: str,
+        streams: dict[str, str],
+        count: int | None = None,
+        block: int | None = None,
+    ) -> list[tuple[str, list[tuple[str, dict[str, str]]]]]:
+        """按消费组读取 Stream 消息。"""
+        return (
+            await self.client.xreadgroup(
+                groupname=group,
+                consumername=consumer,
+                streams=streams,
+                count=count,
+                block=block,
+            )
+            or []
+        )
+
+    async def xack(self, stream: str, group: str, *ids: str) -> int:
+        """确认消费组消息。"""
+        return await self.client.xack(stream, group, *ids)
 
 
 # 全局单例

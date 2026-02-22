@@ -43,6 +43,14 @@ export interface CreateTaskPayload {
 export interface CreateTaskResponse {
   accepted: boolean;
   task_id: string;
+  command_id: string;
+  message: string;
+}
+
+export interface CommandAcceptedResponse {
+  accepted: boolean;
+  task_id: string;
+  command_id: string;
   message: string;
 }
 
@@ -84,19 +92,19 @@ export async function createTask(payload: CreateTaskPayload): Promise<CreateTask
   });
 }
 
-export async function deleteTask(taskId: string): Promise<unknown> {
+export async function deleteTask(taskId: string): Promise<CommandAcceptedResponse> {
   return requestJson(`/api/v1/tasks/${taskId}`, {
     method: "DELETE",
   });
 }
 
-export async function sleepTask(taskId: string): Promise<unknown> {
+export async function sleepTask(taskId: string): Promise<CommandAcceptedResponse> {
   return requestJson(`/api/v1/tasks/${taskId}/sleep`, {
     method: "POST",
   });
 }
 
-export async function wakeTask(taskId: string): Promise<unknown> {
+export async function wakeTask(taskId: string): Promise<CommandAcceptedResponse> {
   return requestJson(`/api/v1/tasks/${taskId}/wake`, {
     method: "POST",
   });
@@ -105,5 +113,11 @@ export async function wakeTask(taskId: string): Promise<unknown> {
 export function createTaskEventSource(taskId: string, history = true): EventSource {
   const params = new URLSearchParams({ history: history ? "1" : "0" });
   const path = `/api/v1/live/subscribe/${taskId}?${params.toString()}`;
+  return new EventSource(`${API_BASE}${path}`);
+}
+
+export function createTasksEventSource(history = true): EventSource {
+  const params = new URLSearchParams({ history: history ? "1" : "0" });
+  const path = `/api/v1/live/tasks?${params.toString()}`;
   return new EventSource(`${API_BASE}${path}`);
 }

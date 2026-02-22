@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import RobotCard from "./RobotCard.vue";
 import { Button } from "@/components/ui/button";
 import type { RobotState } from "@/stores/observability";
@@ -53,12 +53,17 @@ const transform = ref({ x: 0, y: 0, scale: 1 });
 const isDragging = ref(false);
 const dragStart = ref({ x: 0, y: 0 });
 const isAnimating = ref(false);
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
 
 // Robot positions for current task
 const robotPositions = ref(new Map<string, { x: number; y: number }>());
 
 function initializeRobotPositions() {
   const newRobots = props.robots;
+  // 任务切换/重连过程中会短暂出现空列表，不能据此清空已保存位置
+  if (newRobots.length === 0) {
+    return;
+  }
   const existingIds = new Set(robotPositions.value.keys());
   const newIds = new Set(newRobots.map((r) => r.robot_type));
 
@@ -182,6 +187,15 @@ function onRobotMove(robotType: string, deltaX: number, deltaY: number) {
       x: current.x + deltaX / transform.value.scale,
       y: current.y + deltaY / transform.value.scale,
     });
+    if (props.taskId) {
+      if (persistTimer) {
+        clearTimeout(persistTimer);
+      }
+      persistTimer = setTimeout(() => {
+        savePositionsForTask(props.taskId, robotPositions.value);
+        persistTimer = null;
+      }, 250);
+    }
   }
 }
 
@@ -274,6 +288,16 @@ function clearTaskPositions(taskId: string) {
     localStorage.removeItem(`robot-positions:${taskId}`);
   } catch { /* ignore */ }
 }
+
+onBeforeUnmount(() => {
+  if (persistTimer) {
+    clearTimeout(persistTimer);
+    persistTimer = null;
+  }
+  if (props.taskId) {
+    savePositionsForTask(props.taskId, robotPositions.value);
+  }
+});
 
 defineExpose({ focusRobot, clearTaskPositions });
 </script>

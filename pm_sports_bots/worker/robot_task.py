@@ -182,6 +182,33 @@ class RobotTask:
     async def _publish_status(self, status: TaskStatus) -> None:
         """发布任务状态到控制 stream。"""
         await self._emit_control("task_status", status.to_dict())
+        await self._emit_task_projection(status)
+
+    async def _emit_task_projection(self, status: TaskStatus) -> None:
+        version = await self.redis.incr(Channels.task_version(self.task_id))
+        snapshot = {
+            "task_id": self.task_id,
+            "status": status.to_dict(),
+            "config": self.config.to_dict(),
+            "robots": [robot.to_dict() for robot in self.config.robots],
+        }
+        payload = {
+            "type": "task_projection_updated",
+            "task_id": self.task_id,
+            "version": version,
+            "timestamp": _now_iso(),
+            "snapshot": snapshot,
+        }
+        await self.redis.xadd(
+            Channels.TASK_PROJECTION_STREAM,
+            {
+                "type": "task_projection_updated",
+                "task_id": self.task_id,
+                "timestamp": payload["timestamp"],
+                "data": json.dumps(payload, ensure_ascii=False),
+            },
+            maxlen=10000,
+        )
 
     async def _emit_control(self, signal_type: str, payload: dict[str, Any]) -> None:
         """发出控制信号。"""

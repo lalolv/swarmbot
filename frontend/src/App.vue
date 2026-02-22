@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from "vue";
+import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 import Header from "./components/Header.vue";
 import InfiniteCanvas from "./components/InfiniteCanvas.vue";
@@ -14,6 +14,7 @@ const { isDark } = useTheme();
 
 // 画布 ref，用于调用 focusRobot
 const canvasRef = ref<InstanceType<typeof InfiniteCanvas> | null>(null);
+const knownTaskIds = ref<Set<string>>(new Set());
 
 // Methods
 async function handleCreateTask(form: any) {
@@ -38,10 +39,6 @@ async function handleWakeTask(taskId: string) {
   await store.wakeTask(taskId);
 }
 
-async function handleRefreshTasks() {
-  await store.refreshTasks();
-}
-
 function handleFocusRobot(robotType: string) {
   canvasRef.value?.focusRobot(robotType);
 }
@@ -51,8 +48,23 @@ onMounted(() => {
   store.initialize();
 });
 
+watch(
+  () => store.tasks.map((item) => item.task_id),
+  (taskIds) => {
+    const nextIds = new Set(taskIds);
+    for (const oldId of knownTaskIds.value) {
+      if (!nextIds.has(oldId)) {
+        canvasRef.value?.clearTaskPositions(oldId);
+      }
+    }
+    knownTaskIds.value = nextIds;
+  },
+  { immediate: true }
+);
+
 onBeforeUnmount(() => {
   store.stopMonitoring();
+  store.disconnectTasksFeed();
 });
 </script>
 
@@ -86,12 +98,12 @@ onBeforeUnmount(() => {
       :tasks="store.tasks"
       :robot-types="store.robotTypes"
       :current-task-id="store.monitorTaskId"
+      :pending-actions="store.monitorTaskId ? Object.values(store.pendingCommandsByTaskId[store.monitorTaskId] || {}) : []"
       @create-task="handleCreateTask"
       @select-task="handleSelectTask"
       @delete-task="handleDeleteTask"
       @sleep-task="handleSleepTask"
       @wake-task="handleWakeTask"
-      @refresh-tasks="handleRefreshTasks"
     />
 
     <!-- 右侧：机器人列表面板 -->

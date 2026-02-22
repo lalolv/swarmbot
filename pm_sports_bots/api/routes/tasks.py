@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from typing import Any
 from uuid import uuid4
 
@@ -10,7 +9,14 @@ from fastapi import APIRouter, HTTPException, Request
 
 from pm_sports_bots.api.schemas.tasks import CreateTaskRequest, RobotSpec, UpdateTaskRequest
 from pm_sports_bots.robots import TaskComposer
-from pm_sports_bots.shared import Channels, RedisClient, TaskConfig, TaskState, TaskStatus
+from pm_sports_bots.shared import (
+    Channels,
+    RedisClient,
+    TaskCommand,
+    TaskConfig,
+    TaskState,
+    TaskStatus,
+)
 
 router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
 
@@ -83,6 +89,28 @@ async def _load_task_detail(redis: RedisClient, task_id: str) -> dict[str, Any]:
     }
 
 
+async def _enqueue_command(
+    redis: RedisClient,
+    *,
+    task_id: str,
+    action: str,
+    payload: dict[str, Any] | None = None,
+) -> TaskCommand:
+    command = TaskCommand.create(task_id=task_id, action=action, payload=payload)
+    encoded = command.to_json()
+    await redis.xadd(
+        Channels.COMMAND_STREAM,
+        {
+            "type": "task_command",
+            "task_id": task_id,
+            "timestamp": command.created_at,
+            "data": encoded,
+        },
+        maxlen=5000,
+    )
+    return command
+
+
 @router.get("/robots")
 async def list_available_robots() -> dict[str, Any]:
     return {"robot_types": TaskComposer.available_robot_types()}
@@ -107,15 +135,18 @@ async def create_task(request: Request, body: CreateTaskRequest) -> dict[str, An
         "robots": serialized_robots,
         "custom_config": dict(body.custom_config),
     }
-    message = {
-        "action": "create",
-        "task_id": task_id,
-        "user_id": body.user_id,
-        "config": config_payload,
-    }
-    await redis.publish(Channels.CONTROL, json.dumps(message, ensure_ascii=False))
+    command = await _enqueue_command(
+        redis,
+        task_id=task_id,
+        action="create",
+        payload={
+            "user_id": body.user_id,
+            "config": config_payload,
+        },
+    )
     return {
         "task_id": task_id,
+        "command_id": command.command_id,
         "accepted": True,
         "message": "Create command published",
     }
@@ -189,14 +220,15 @@ async def update_task(task_id: str, request: Request, body: UpdateTaskRequest) -
 
     _validate_robot_types([robot.to_dict() for robot in merged_config.robots])
 
-    message = {
-        "action": "update_config",
-        "task_id": task_id,
-        "patch": patch,
-    }
-    await redis.publish(Channels.CONTROL, json.dumps(message, ensure_ascii=False))
+    command = await _enqueue_command(
+        redis,
+        task_id=task_id,
+        action="update_config",
+        payload={"patch": patch},
+    )
     return {
         "task_id": task_id,
+        "command_id": command.command_id,
         "accepted": True,
         "message": "Update command published",
     }
@@ -209,10 +241,10 @@ async def delete_task(task_id: str, request: Request) -> dict[str, Any]:
     if not exists:
         raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
 
-    message = {"action": "delete", "task_id": task_id}
-    await redis.publish(Channels.CONTROL, json.dumps(message, ensure_ascii=False))
+    command = await _enqueue_command(redis, task_id=task_id, action="delete")
     return {
         "task_id": task_id,
+        "command_id": command.command_id,
         "accepted": True,
         "message": "Delete command published",
     }
@@ -233,10 +265,10 @@ async def sleep_task(task_id: str, request: Request) -> dict[str, Any]:
     if status.state != TaskState.RUNNING:
         raise HTTPException(status_code=409, detail=f"Task is not running: {task_id} ({status.state.value})")
 
-    message = {"action": "sleep", "task_id": task_id}
-    await redis.publish(Channels.CONTROL, json.dumps(message, ensure_ascii=False))
+    command = await _enqueue_command(redis, task_id=task_id, action="sleep")
     return {
         "task_id": task_id,
+        "command_id": command.command_id,
         "accepted": True,
         "message": "Sleep command published",
     }
@@ -257,10 +289,10 @@ async def wake_task(task_id: str, request: Request) -> dict[str, Any]:
     if status.state != TaskState.SLEEPING:
         raise HTTPException(status_code=409, detail=f"Task is not sleeping: {task_id} ({status.state.value})")
 
-    message = {"action": "wake", "task_id": task_id}
-    await redis.publish(Channels.CONTROL, json.dumps(message, ensure_ascii=False))
+    command = await _enqueue_command(redis, task_id=task_id, action="wake")
     return {
         "task_id": task_id,
+        "command_id": command.command_id,
         "accepted": True,
         "message": "Wake command published",
     }

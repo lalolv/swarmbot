@@ -38,6 +38,9 @@ class Channels:
 
     # 控制 Channel（Worker 监听）
     CONTROL = f"{PREFIX}:control"
+    COMMAND_STREAM = f"{PREFIX}:stream:commands"
+    COMMAND_RECEIPT_STREAM = f"{PREFIX}:stream:command_receipts"
+    TASK_PROJECTION_STREAM = f"{PREFIX}:stream:task_projections"
 
     # Stream 名常量（从枚举引用，保持向后兼容）
     STREAM_DATA = StreamName.DATA
@@ -72,6 +75,11 @@ class Channels:
         """任务快照 Key"""
         safe_name = name.replace(":", "_")
         return f"{cls.PREFIX}:task:{task_id}:snapshot:{safe_name}"
+
+    @classmethod
+    def task_version(cls, task_id: str) -> str:
+        """任务投影版本 Key"""
+        return f"{cls.PREFIX}:task:{task_id}:projection_version"
 
     @classmethod
     def all_tasks(cls) -> str:

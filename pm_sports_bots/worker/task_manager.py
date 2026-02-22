@@ -2,11 +2,21 @@
 
 import asyncio
 import json
-from typing import Optional
+from datetime import datetime
+from uuid import uuid4
+from typing import Any, Optional
 
 from loguru import logger
+from redis.exceptions import ResponseError
 
-from pm_sports_bots.shared import Channels, RedisClient, TaskConfig, TaskState, TaskStatus
+from pm_sports_bots.shared import (
+    Channels,
+    CommandReceipt,
+    RedisClient,
+    TaskConfig,
+    TaskState,
+    TaskStatus,
+)
 from pm_sports_bots.worker.robot_task import RobotTask
 
 
@@ -14,7 +24,7 @@ class TaskManager:
     """后台任务管理器。
 
     职责：
-    - 监听 Redis Pub/Sub 控制 Channel
+    - 监听 Redis Streams 命令流
     - 任务 CRUD（创建、取消、查询）
     - 崩溃恢复（扫描 Redis 中 PENDING/RUNNING 状态的任务）
     - 配置热更新转发
@@ -24,6 +34,8 @@ class TaskManager:
         self.redis = redis
         self._tasks: dict[str, RobotTask] = {}
         self._running = False
+        self._command_group = "task_manager"
+        self._consumer_name = f"worker-{uuid4().hex[:8]}"
 
     async def start(self) -> None:
         """启动任务管理器。"""
@@ -31,7 +43,8 @@ class TaskManager:
         logger.info("TaskManager 已启动")
 
         await self._recover_tasks()
-        await self._listen_control()
+        await self._ensure_command_group()
+        await self._listen_commands()
 
     async def stop(self) -> None:
         """停止任务管理器。"""
@@ -72,6 +85,7 @@ class TaskManager:
         )
         self._tasks[task_id] = task
         task._task = asyncio.create_task(self._run_task(task_id, task))
+        await self._emit_task_projection(task_id)
 
         logger.info("任务已创建: {}", task_id)
         return True
@@ -102,6 +116,7 @@ class TaskManager:
         task = RobotTask(task_id=task_id, config=config, redis=self.redis)
         self._tasks[task_id] = task
         task._task = asyncio.create_task(self._run_task(task_id, task))
+        await self._emit_task_projection(task_id)
         logger.info("任务已唤醒: {}", task_id)
         return True
 
@@ -135,6 +150,8 @@ class TaskManager:
         removed_task_count = await self.redis.srem(Channels.all_tasks(), task_id)
         if user_id:
             await self.redis.srem(Channels.user_tasks(user_id), task_id)
+
+        await self._emit_task_projection_deleted(task_id)
 
         logger.info(
             "任务已删除: task={} keys_removed={} task_set_removed={}",
@@ -200,21 +217,165 @@ class TaskManager:
             task._task = asyncio.create_task(self._run_task(task_id, task))
             logger.info("任务已恢复: {}", task_id)
 
-    async def _listen_control(self) -> None:
-        """监听控制 Channel。"""
-        logger.info("开始监听控制 Channel: {}", Channels.CONTROL)
+    async def _emit_command_receipt(
+        self,
+        *,
+        command_id: str,
+        task_id: str,
+        action: str,
+        status: str,
+        reason: str = "",
+    ) -> None:
+        receipt = CommandReceipt(
+            command_id=command_id,
+            task_id=task_id,
+            action=action,
+            status=status,
+            reason=reason,
+            timestamp=datetime.utcnow().isoformat() + "Z",
+        )
+        await self.redis.xadd(
+            Channels.COMMAND_RECEIPT_STREAM,
+            {
+                "type": "command_receipt",
+                "task_id": task_id,
+                "timestamp": receipt.timestamp,
+                "data": receipt.to_json(),
+            },
+            maxlen=10000,
+        )
 
+    async def _emit_task_projection(self, task_id: str) -> None:
+        config_raw = await self.redis.get(Channels.task_config(task_id))
+        status_raw = await self.redis.get(Channels.task_status(task_id))
+
+        config_payload: dict[str, Any] | None = None
+        robots_payload: list[dict[str, Any]] = []
+        if config_raw:
+            try:
+                config = TaskConfig.from_json(config_raw)
+                config_payload = config.to_dict()
+                robots_payload = [robot.to_dict() for robot in config.robots]
+            except Exception:
+                config_payload = None
+
+        status_payload: dict[str, Any] | None = None
+        if status_raw:
+            try:
+                status_payload = TaskStatus.from_json(status_raw).to_dict()
+            except Exception:
+                status_payload = None
+
+        version = await self.redis.incr(Channels.task_version(task_id))
+        payload = {
+            "type": "task_projection_updated",
+            "task_id": task_id,
+            "version": version,
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "snapshot": {
+                "task_id": task_id,
+                "status": status_payload,
+                "config": config_payload,
+                "robots": robots_payload,
+            },
+        }
+        await self.redis.xadd(
+            Channels.TASK_PROJECTION_STREAM,
+            {
+                "type": "task_projection_updated",
+                "task_id": task_id,
+                "timestamp": payload["timestamp"],
+                "data": json.dumps(payload, ensure_ascii=False),
+            },
+            maxlen=10000,
+        )
+
+    async def _emit_task_projection_deleted(self, task_id: str) -> None:
+        version = await self.redis.incr(Channels.task_version(task_id))
+        payload = {
+            "type": "task_projection_deleted",
+            "task_id": task_id,
+            "version": version,
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        }
+        await self.redis.xadd(
+            Channels.TASK_PROJECTION_STREAM,
+            {
+                "type": "task_projection_deleted",
+                "task_id": task_id,
+                "timestamp": payload["timestamp"],
+                "data": json.dumps(payload, ensure_ascii=False),
+            },
+            maxlen=10000,
+        )
+
+    async def _ensure_command_group(self) -> None:
+        """确保命令消费组存在。"""
         try:
-            async for message in self.redis.subscribe(Channels.CONTROL):
-                if not self._running:
-                    break
-                await self._handle_control_message(message)
-        except asyncio.CancelledError:
-            pass
-        except Exception as exc:
-            logger.error("控制 Channel 监听异常: {}", exc)
+            await self.redis.xgroup_create(
+                Channels.COMMAND_STREAM,
+                self._command_group,
+                id="$",
+                mkstream=True,
+            )
+            logger.info(
+                "命令消费组已创建: stream={} group={}",
+                Channels.COMMAND_STREAM,
+                self._command_group,
+            )
+        except ResponseError as exc:
+            if "BUSYGROUP" in str(exc):
+                logger.info(
+                    "命令消费组已存在: stream={} group={}",
+                    Channels.COMMAND_STREAM,
+                    self._command_group,
+                )
+                return
+            raise
 
-    async def _handle_control_message(self, message: dict) -> None:
+    async def _listen_commands(self) -> None:
+        """监听命令 Stream 并按消费组处理。"""
+        logger.info(
+            "开始监听命令流: stream={} group={} consumer={}",
+            Channels.COMMAND_STREAM,
+            self._command_group,
+            self._consumer_name,
+        )
+
+        while self._running:
+            try:
+                results = await self.redis.xreadgroup(
+                    group=self._command_group,
+                    consumer=self._consumer_name,
+                    streams={Channels.COMMAND_STREAM: ">"},
+                    count=100,
+                    block=1000,
+                )
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                logger.error("命令流监听异常: {}", exc)
+                await asyncio.sleep(1.0)
+                continue
+
+            if not results:
+                continue
+
+            for stream_name, messages in results:
+                for msg_id, fields in messages:
+                    if not self._running:
+                        break
+                    try:
+                        await self._handle_command_message(fields)
+                    except Exception as exc:
+                        logger.error("处理命令失败 stream={} id={}: {}", stream_name, msg_id, exc)
+                    finally:
+                        try:
+                            await self.redis.xack(Channels.COMMAND_STREAM, self._command_group, msg_id)
+                        except Exception as ack_exc:
+                            logger.error("命令 ACK 失败 id={}: {}", msg_id, ack_exc)
+
+    async def _handle_command_message(self, fields: dict[str, str]) -> None:
         """处理控制消息。
 
         支持的 action:
@@ -226,35 +387,140 @@ class TaskManager:
         - shutdown: 关闭 Worker
         """
         try:
-            data = json.loads(message["data"])
+            raw = fields.get("data", "{}")
+            data = json.loads(raw)
             action = data.get("action")
             task_id = data.get("task_id")
+            command_id = str(data.get("command_id") or f"legacy-{datetime.utcnow().timestamp()}")
+            payload = data.get("payload") if isinstance(data.get("payload"), dict) else {}
+
+            if action and task_id:
+                await self._emit_command_receipt(
+                    command_id=command_id,
+                    task_id=task_id,
+                    action=action,
+                    status="accepted",
+                )
 
             if action == "create" and task_id:
-                config_data = data.get("config", {})
-                user_id = data.get("user_id", "")
+                raw_config_data = payload.get("config") if payload else data.get("config", {})
+                if not isinstance(raw_config_data, dict):
+                    await self._emit_command_receipt(
+                        command_id=command_id,
+                        task_id=task_id,
+                        action=action,
+                        status="rejected",
+                        reason="配置格式错误",
+                    )
+                    return
+                config_data: dict[str, Any] = dict(raw_config_data)
+                user_id = (payload.get("user_id") if payload else data.get("user_id", "")) or ""
                 if user_id and "user_id" not in config_data:
                     config_data["user_id"] = user_id
                 config = TaskConfig.from_dict(config_data)
-                await self.create_task(task_id, config)
+                created = await self.create_task(task_id, config)
+                if not created:
+                    await self._emit_command_receipt(
+                        command_id=command_id,
+                        task_id=task_id,
+                        action=action,
+                        status="rejected",
+                        reason="任务已存在或正在运行",
+                    )
+                    return
+                await self._emit_command_receipt(
+                    command_id=command_id,
+                    task_id=task_id,
+                    action=action,
+                    status="applied",
+                )
 
             elif action == "sleep" and task_id:
-                await self.sleep_task(task_id)
+                slept = await self.sleep_task(task_id)
+                if not slept:
+                    await self._emit_command_receipt(
+                        command_id=command_id,
+                        task_id=task_id,
+                        action=action,
+                        status="rejected",
+                        reason="任务不存在或未运行",
+                    )
+                    return
+                await self._emit_command_receipt(
+                    command_id=command_id,
+                    task_id=task_id,
+                    action=action,
+                    status="applied",
+                )
 
             elif action == "wake" and task_id:
-                await self.wake_task(task_id)
+                waked = await self.wake_task(task_id)
+                if not waked:
+                    await self._emit_command_receipt(
+                        command_id=command_id,
+                        task_id=task_id,
+                        action=action,
+                        status="rejected",
+                        reason="任务无法唤醒（不存在或已运行）",
+                    )
+                    return
+                await self._emit_command_receipt(
+                    command_id=command_id,
+                    task_id=task_id,
+                    action=action,
+                    status="applied",
+                )
 
             elif action == "delete" and task_id:
-                await self.delete_task(task_id)
+                deleted = await self.delete_task(task_id)
+                if not deleted:
+                    await self._emit_command_receipt(
+                        command_id=command_id,
+                        task_id=task_id,
+                        action=action,
+                        status="rejected",
+                        reason="任务不存在",
+                    )
+                    return
+                await self._emit_command_receipt(
+                    command_id=command_id,
+                    task_id=task_id,
+                    action=action,
+                    status="applied",
+                )
 
             elif action == "update_config" and task_id:
-                patch = data.get("patch", {})
+                raw_patch = payload.get("patch") if payload else data.get("patch", {})
+                if not isinstance(raw_patch, dict):
+                    await self._emit_command_receipt(
+                        command_id=command_id,
+                        task_id=task_id,
+                        action=action,
+                        status="rejected",
+                        reason="patch 格式错误",
+                    )
+                    return
+                patch: dict[str, Any] = dict(raw_patch)
                 task = self._tasks.get(task_id)
                 if not task:
                     logger.warning("任务未运行，无法更新配置: {}", task_id)
+                    await self._emit_command_receipt(
+                        command_id=command_id,
+                        task_id=task_id,
+                        action=action,
+                        status="rejected",
+                        reason="任务未运行，无法更新配置",
+                    )
                     return
                 await task.update_config(patch)
                 logger.info("任务配置已更新: {}", task_id)
+                await self._emit_task_projection(task_id)
+                await self._emit_command_receipt(
+                    command_id=command_id,
+                    task_id=task_id,
+                    action=action,
+                    status="applied",
+                )
 
             elif action == "shutdown":
                 logger.info("收到关闭指令")

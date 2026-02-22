@@ -5,6 +5,7 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from enum import StrEnum
 from typing import Any, Optional
+from uuid import uuid4
 
 
 class TaskState(StrEnum):
@@ -180,3 +181,71 @@ class TaskStatus:
         self.updated_at = datetime.utcnow().isoformat() + "Z"
         if error:
             self.error = error
+
+
+@dataclass
+class TaskCommand:
+    """任务控制命令。"""
+
+    command_id: str
+    task_id: str
+    action: str
+    payload: dict[str, Any]
+    actor: str
+    created_at: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "command_id": self.command_id,
+            "task_id": self.task_id,
+            "action": self.action,
+            "payload": self.payload,
+            "actor": self.actor,
+            "created_at": self.created_at,
+        }
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict(), ensure_ascii=False)
+
+    @classmethod
+    def create(
+        cls,
+        task_id: str,
+        action: str,
+        payload: Optional[dict[str, Any]] = None,
+        actor: str = "api",
+    ) -> "TaskCommand":
+        return cls(
+            command_id=f"cmd-{uuid4().hex}",
+            task_id=task_id,
+            action=action,
+            payload=payload or {},
+            actor=actor,
+            created_at=datetime.utcnow().isoformat() + "Z",
+        )
+
+
+@dataclass
+class CommandReceipt:
+    """任务命令处理回执。"""
+
+    command_id: str
+    task_id: str
+    action: str
+    status: str
+    timestamp: str
+    reason: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "type": "command_receipt",
+            "command_id": self.command_id,
+            "task_id": self.task_id,
+            "action": self.action,
+            "status": self.status,
+            "reason": self.reason,
+            "timestamp": self.timestamp,
+        }
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict(), ensure_ascii=False)

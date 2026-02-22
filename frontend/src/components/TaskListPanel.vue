@@ -9,6 +9,7 @@ const props = defineProps<{
   tasks: TaskItem[];
   robotTypes: string[];
   currentTaskId: string;
+  pendingActions?: string[];
 }>();
 
 const emit = defineEmits<{
@@ -17,7 +18,6 @@ const emit = defineEmits<{
   "delete-task": [taskId: string];
   "sleep-task": [taskId: string];
   "wake-task": [taskId: string];
-  "refresh-tasks": [];
 }>();
 
 // 面板折叠状态
@@ -38,6 +38,8 @@ const createForm = reactive({
 const canDelete = computed(() => !!props.currentTaskId);
 const currentTask = computed(() => props.tasks.find(t => t.task_id === props.currentTaskId));
 const currentTaskState = computed(() => currentTask.value?.status?.state || "");
+const pendingActions = computed(() => props.pendingActions || []);
+const isActionPending = (action: string) => pendingActions.value.includes(action);
 
 function getStateDotClass(state: string): string {
   switch (state) {
@@ -152,12 +154,7 @@ async function deleteTask() {
           <span class="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
             {{ tasks.length }} 个任务
           </span>
-          <button
-            @click="$emit('refresh-tasks')"
-            class="text-[10px] font-semibold text-primary hover:underline"
-          >
-            刷新
-          </button>
+          <span v-if="pendingActions.length > 0" class="text-[10px] font-semibold text-primary">处理中</span>
         </div>
 
         <div v-if="tasks.length === 0" class="px-4 py-6 text-center text-sm text-muted-foreground">
@@ -206,6 +203,7 @@ async function deleteTask() {
             variant="outline"
             size="sm"
             class="flex-1 border-amber-600/50 text-amber-600 hover:bg-amber-600/10"
+            :disabled="isActionPending('sleep') || isActionPending('wake') || isActionPending('delete')"
             @click="emit('sleep-task', currentTaskId)"
           >
             <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -221,6 +219,7 @@ async function deleteTask() {
             variant="outline"
             size="sm"
             class="flex-1 border-emerald-600/50 text-emerald-600 hover:bg-emerald-600/10"
+            :disabled="isActionPending('sleep') || isActionPending('wake') || isActionPending('delete')"
             @click="emit('wake-task', currentTaskId)"
           >
             <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -235,6 +234,7 @@ async function deleteTask() {
             variant="destructive"
             size="sm"
             :class="currentTaskState === 'running' || currentTaskState === 'sleeping' ? 'flex-1' : 'w-full'"
+            :disabled="isActionPending('sleep') || isActionPending('wake') || isActionPending('delete')"
             @click="deleteTask"
           >
             <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">

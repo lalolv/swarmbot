@@ -63,6 +63,25 @@ async def subscribe_task(
     )
 
 
+@router.get("/tasks")
+async def subscribe_tasks(request: Request) -> StreamingResponse:
+    """订阅任务投影与命令回执事件流。"""
+    redis: RedisClient | None = getattr(request.app.state, "redis", None)
+    if redis is None:
+        raise HTTPException(status_code=503, detail="任务模式不可用，请配置 REDIS_URL")
+
+    generator = _subscribe_tasks_events(request, redis)
+    return StreamingResponse(
+        generator,
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 async def _subscribe_task_via_streams(
     request: Request,
     redis: RedisClient,
@@ -137,6 +156,59 @@ async def _subscribe_task_via_streams(
                 yield _format_sse_event(event_type, payload, event_id=event_id)
 
 
+async def _subscribe_tasks_events(
+    request: Request,
+    redis: RedisClient,
+) -> AsyncGenerator[str, None]:
+    default_cursor = "0" if request.query_params.get("history") == "1" else "$"
+    streams = {
+        Channels.TASK_PROJECTION_STREAM: default_cursor,
+        Channels.COMMAND_RECEIPT_STREAM: default_cursor,
+    }
+
+    stream_hint, last_msg_id = _parse_last_event_id(request.headers.get("last-event-id", ""))
+    if stream_hint and last_msg_id:
+        stream_key = _global_stream_key(stream_hint)
+        if stream_key in streams:
+            streams[stream_key] = last_msg_id
+
+    yield _format_sse_event("subscribed", {"scope": "tasks", "source": "streams"})
+
+    while True:
+        if await request.is_disconnected():
+            break
+
+        try:
+            results = await redis.xread(streams=streams, count=200, block=1000)
+        except Exception as exc:
+            logger.error("任务事件流 xread 异常: {}", exc)
+            yield _format_sse_event(
+                "error",
+                {"code": "STREAM_READ_ERROR", "message": str(exc), "recoverable": True},
+            )
+            continue
+
+        if not results:
+            yield _format_sse_event("heartbeat", {"ts": _now_iso()})
+            continue
+
+        for stream_key, messages in results:
+            alias = _global_stream_alias(stream_key)
+            if messages:
+                streams[stream_key] = messages[-1][0]
+
+            for msg_id, fields in messages:
+                raw = fields.get("data", "{}")
+                try:
+                    payload = json.loads(raw)
+                    if not isinstance(payload, dict):
+                        payload = {"value": payload}
+                except Exception:
+                    payload = {}
+                event_type = str(payload.get("type") or fields.get("type") or "unknown")
+                yield _format_sse_event(event_type, payload, event_id=f"{alias}|{msg_id}")
+
+
 def _signal_to_sse(fields: dict[str, str]) -> tuple[str | None, dict]:
     """将 Signal fields 转换为 SSE 事件。
 
@@ -172,9 +244,11 @@ def _signal_to_sse(fields: dict[str, str]) -> tuple[str | None, dict]:
 
     source = str(fields.get("source", "") or "")
     timestamp = str(fields.get("timestamp", "") or "")
+    task_id = str(fields.get("task_id", "") or "")
 
     if signal_type in {"data_update", "process_result"}:
         payload = {
+            "task_id": task_id,
             "robot_type": source,
             "signal_type": signal_type,
             "timestamp": timestamp,
@@ -188,12 +262,16 @@ def _signal_to_sse(fields: dict[str, str]) -> tuple[str | None, dict]:
         if signal_type == "robot_error":
             state = "error"
         payload = {
+            "task_id": task_id,
             "robot_type": robot_type,
             "state": state,
             "last_error": payload.get("error"),
             "stage": payload.get("stage"),
             "timestamp": payload.get("timestamp") or fields.get("timestamp"),
         }
+
+    if task_id and "task_id" not in payload:
+        payload["task_id"] = task_id
 
     return event_type, payload
 
@@ -210,6 +288,22 @@ def _parse_stream_name(task_id: str, stream_key: str) -> str:
     if stream_key.startswith(prefix):
         return stream_key[len(prefix):]
     return stream_key
+
+
+def _global_stream_alias(stream_key: str) -> str:
+    if stream_key == Channels.TASK_PROJECTION_STREAM:
+        return "task_projections"
+    if stream_key == Channels.COMMAND_RECEIPT_STREAM:
+        return "command_receipts"
+    return stream_key
+
+
+def _global_stream_key(alias: str) -> str | None:
+    if alias == "task_projections":
+        return Channels.TASK_PROJECTION_STREAM
+    if alias == "command_receipts":
+        return Channels.COMMAND_RECEIPT_STREAM
+    return None
 
 
 def _parse_last_event_id(value: str) -> tuple[str | None, str | None]:
