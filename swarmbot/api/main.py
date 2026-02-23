@@ -6,9 +6,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from pm_sports_bots.api.routes.live_stream import router as live_router
-from pm_sports_bots.api.routes.tasks import router as task_router
-from pm_sports_bots.shared import RedisClient
+from swarmbot.api.routes.live_stream import router as live_router
+from swarmbot.api.routes.tasks import router as task_router
+from swarmbot.shared import RedisClient
 
 
 @asynccontextmanager

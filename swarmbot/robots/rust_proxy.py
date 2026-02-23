@@ -5,7 +5,7 @@ Rust 机器人以独立进程运行，直接通过 Redis Streams 与系统通信
 
 通信契约（Rust 进程必须遵守）：
   - 从环境变量读取：TASK_ID、REDIS_URL、INPUT_STREAMS、OUTPUT_STREAMS
-  - Stream Key 格式：pm_sports_bots:task:{TASK_ID}:stream:{stream_name}
+  - Stream Key 格式：swarmbot:task:{TASK_ID}:stream:{stream_name}
   - Signal 字段：type、source、task_id、timestamp、schema_version、data（JSON 字符串）
   - 启动时向 control stream 写入 robot_start 信号
   - 收到 SIGTERM 时优雅关闭，写入 robot_stop 信号
@@ -28,9 +28,9 @@ from typing import Any
 
 from loguru import logger
 
-from pm_sports_bots.robots.base import BaseRobot, RobotState, RobotStatus, StatusCallback, _now_iso
-from pm_sports_bots.shared import RedisClient
-from pm_sports_bots.shared.channels import Channels, StreamName
+from swarmbot.robots.base import BaseRobot, RobotState, RobotStatus, StatusCallback, _now_iso
+from swarmbot.shared import RedisClient
+from swarmbot.shared.channels import Channels, StreamName
 
 
 class RustRobotProxy(BaseRobot):

@@ -9,7 +9,7 @@ from typing import Any, Optional
 from loguru import logger
 from redis.exceptions import ResponseError
 
-from pm_sports_bots.shared import (
+from swarmbot.shared import (
     Channels,
     CommandReceipt,
     RedisClient,
@@ -17,7 +17,7 @@ from pm_sports_bots.shared import (
     TaskState,
     TaskStatus,
 )
-from pm_sports_bots.worker.robot_task import RobotTask
+from swarmbot.worker.robot_task import RobotTask
 
 
 class TaskManager:

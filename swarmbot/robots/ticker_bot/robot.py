@@ -12,8 +12,8 @@ from datetime import datetime
 
 from loguru import logger
 
-from pm_sports_bots.robots.base import BaseRobot
-from pm_sports_bots.shared.channels import SignalType, StreamName
+from swarmbot.robots.base import BaseRobot
+from swarmbot.shared.channels import SignalType, StreamName
 
 
 class TickerBot(BaseRobot):

@@ -7,7 +7,7 @@ import json
 import os
 from typing import Any
 
-from pm_sports_bots.shared import Channels, RedisClient
+from swarmbot.shared import Channels, RedisClient
 
 
 class ExecutionDedupe:

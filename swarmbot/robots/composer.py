@@ -13,7 +13,7 @@ from typing import Any
 
 from loguru import logger
 
-from pm_sports_bots.shared import RedisClient, TaskConfig, TaskRobotSpec
+from swarmbot.shared import RedisClient, TaskConfig, TaskRobotSpec
 
 from .base import BaseRobot, StatusCallback
 
@@ -27,7 +27,7 @@ def _discover_robots() -> dict[str, type[BaseRobot]]:
         if not bot_dir.is_dir() or not (bot_dir / "robot.py").exists():
             continue
 
-        module_name = f"pm_sports_bots.robots.{bot_dir.name}"
+        module_name = f"swarmbot.robots.{bot_dir.name}"
         try:
             module = importlib.import_module(module_name)
         except Exception as exc:

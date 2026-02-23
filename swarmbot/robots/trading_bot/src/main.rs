@@ -31,7 +31,7 @@ use tracing::{info, warn, error};
 // Redis Stream Key 格式（与 Python Channels 一致）
 // ─────────────────────────────────────────────
 
-const STREAM_PREFIX: &str = "pm_sports_bots";
+const STREAM_PREFIX: &str = "swarmbot";
 
 fn stream_key(task_id: &str, stream_name: &str) -> String {
     format!("{STREAM_PREFIX}:task:{task_id}:stream:{stream_name}")

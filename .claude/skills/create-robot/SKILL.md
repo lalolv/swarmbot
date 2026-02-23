@@ -6,7 +6,7 @@ tools: Read, Write, Bash
 
 # Create Robot
 
-为 pm-sports-bots 系统创建新机器人。机器人类型只有两种：**Python** 和 **Rust**。
+为 swarmbot 系统创建新机器人。机器人类型只有两种：**Python** 和 **Rust**。
 
 ## 执行前必须收集的参数
 
@@ -26,7 +26,7 @@ tools: Read, Write, Bash
 
 - 目录名 = `{name}_bot`，全小写 snake_case
 - `robot_type` 必须与目录名**完全一致**（`composer.py` 启动时会校验，不一致会抛 `ValueError`）
-- 目录存放位置：`pm_sports_bots/robots/{name}_bot/`
+- 目录存放位置：`swarmbot/robots/{name}_bot/`
 
 ---
 
@@ -68,10 +68,10 @@ tools: Read, Write, Bash
 
 ### Step 1：确认流名有效
 
-检查 `pm_sports_bots/shared/channels.py` 中的 `StreamName` 枚举，确认所用流名已定义：
+检查 `swarmbot/shared/channels.py` 中的 `StreamName` 枚举，确认所用流名已定义：
 
 ```bash
-grep -A 20 "class StreamName" pm_sports_bots/shared/channels.py
+grep -A 20 "class StreamName" swarmbot/shared/channels.py
 ```
 
 若不存在，提示用户先在 `StreamName` 中添加。
@@ -79,9 +79,9 @@ grep -A 20 "class StreamName" pm_sports_bots/shared/channels.py
 ### Step 2：创建目录
 
 ```bash
-mkdir -p pm_sports_bots/robots/{name}_bot
+mkdir -p swarmbot/robots/{name}_bot
 # Rust 机器人额外执行：
-mkdir -p pm_sports_bots/robots/{name}_bot/src
+mkdir -p swarmbot/robots/{name}_bot/src
 ```
 
 ### Step 3：写入文件
@@ -91,14 +91,14 @@ mkdir -p pm_sports_bots/robots/{name}_bot/src
 ### Step 4：语法检查
 
 ```bash
-uv run python -m compileall pm_sports_bots/robots/{name}_bot -q
+uv run python -m compileall swarmbot/robots/{name}_bot -q
 ```
 
 ### Step 5：验证自动注册
 
 ```bash
 uv run python -c "
-from pm_sports_bots.robots.composer import TaskComposer
+from swarmbot.robots.composer import TaskComposer
 types = TaskComposer.available_robot_types()
 assert '{name}_bot' in types, f'注册失败，当前: {types}'
 print('注册成功:', types)
@@ -108,7 +108,7 @@ print('注册成功:', types)
 ### Step 6（仅 Rust）：编译验证
 
 ```bash
-cd pm_sports_bots/robots/{name}_bot && cargo build --release
+cd swarmbot/robots/{name}_bot && cargo build --release
 ```
 
 ---

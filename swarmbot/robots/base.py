@@ -14,8 +14,8 @@ from typing import Any
 
 from loguru import logger
 
-from pm_sports_bots.shared import Channels, RedisClient
-from pm_sports_bots.shared.channels import SignalType, StreamName
+from swarmbot.shared import Channels, RedisClient
+from swarmbot.shared.channels import SignalType, StreamName
 
 # 状态广播回调类型：接收状态字典，无返回值
 StatusCallback = Callable[[dict[str, Any]], Coroutine[Any, Any, None]]

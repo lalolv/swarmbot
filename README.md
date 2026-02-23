@@ -1,6 +1,6 @@
 ## PM Sports Bots Scaffold
 
-Redis Streams + Worker + SSE backend scaffold is ready under `pm_sports_bots/`.
+Redis Streams + Worker + SSE backend scaffold is ready under `swarmbot/`.
 
 ### 1) Install dependencies
 
@@ -23,13 +23,13 @@ docker run --rm -p 6379:6379 redis:7
 ### 3) Start Worker
 
 ```bash
-uv run python -m pm_sports_bots.worker.main
+uv run python -m swarmbot.worker.main
 ```
 
 ### 4) Start API (task CRUD + SSE bridge)
 
 ```bash
-uv run uvicorn pm_sports_bots.api.main:app --host 0.0.0.0 --port 8000 --reload
+uv run uvicorn swarmbot.api.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ### 5) Submit a demo task

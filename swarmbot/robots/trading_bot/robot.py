@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import os
 
-from pm_sports_bots.robots.rust_proxy import RustRobotProxy
-from pm_sports_bots.shared.channels import StreamName
+from swarmbot.robots.rust_proxy import RustRobotProxy
+from swarmbot.shared.channels import StreamName
 
 _BIN = os.path.join(os.path.dirname(__file__), "target/release/trading-bot")
 

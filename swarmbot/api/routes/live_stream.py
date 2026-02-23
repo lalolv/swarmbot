@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from loguru import logger
 
-from pm_sports_bots.shared import Channels, RedisClient, TaskState, TaskStatus
+from swarmbot.shared import Channels, RedisClient, TaskState, TaskStatus
 
 
 router = APIRouter(prefix="/api/v1/live", tags=["live"])

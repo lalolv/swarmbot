@@ -15,8 +15,8 @@ Redis Streams + Worker + SSE backend scaffold for managing autonomous robot syst
 uv sync                                              # Install Python deps
 cp .env.example .env                                 # First-time env setup
 docker run --rm -p 6379:6379 redis:7                 # Start local Redis
-uv run python -m pm_sports_bots.worker.main          # Start worker
-uv run uvicorn pm_sports_bots.api.main:app --host 0.0.0.0 --port 8000 --reload  # Start API
+uv run python -m swarmbot.worker.main          # Start worker
+uv run uvicorn swarmbot.api.main:app --host 0.0.0.0 --port 8000 --reload  # Start API
 uv run python scripts/publish_demo_task.py           # Submit demo task
 ```
 
@@ -27,9 +27,9 @@ cd frontend && npm install && npm run dev            # Dev server on :5173 (prox
 
 ### Lint / Format / Test
 ```bash
-uv run python -m compileall pm_sports_bots scripts   # Minimum syntax check
-uv run ruff check --fix pm_sports_bots scripts       # Lint + auto-fix
-uv run ruff format pm_sports_bots scripts            # Format
+uv run python -m compileall swarmbot scripts   # Minimum syntax check
+uv run ruff check --fix swarmbot scripts       # Lint + auto-fix
+uv run ruff format swarmbot scripts            # Format
 uv run pytest                                        # Full test suite
 uv run pytest tests/test_file.py::test_name -q       # Single test
 uv run pytest -x                                     # Stop on first failure
@@ -39,7 +39,7 @@ No `tests/` directory exists yet. Always run `compileall` as minimum verificatio
 
 ## Architecture
 
-Four backend layers under `pm_sports_bots/`:
+Four backend layers under `swarmbot/`:
 
 - **`shared/`** — Redis client wrapper, channel/key naming (`Channels`, `StreamName`, `SignalType`), domain models (`TaskConfig`, `TaskStatus`, `TaskState`), Pydantic schemas
 - **`robots/`** — `BaseRobot` ABC; `RustRobotProxy` for Rust subprocess robots; `TaskComposer` auto-discovers and instantiates robots
@@ -52,7 +52,7 @@ Frontend (`frontend/src/`): Vue 3 app with Pinia store (`stores/observability.js
 1. API creates task → publishes to Redis control channel
 2. Worker's `TaskManager` picks it up → `RobotTask.run()` starts
 3. `TaskComposer.compose()` instantiates robots per `TaskConfig.robots` (`robots` is required, no implicit defaults)
-4. Robots emit signals to task-scoped streams (`pm_sports_bots:task:TASK_ID:stream:NAME`)
+4. Robots emit signals to task-scoped streams (`swarmbot:task:TASK_ID:stream:NAME`)
 5. SSE bridge streams events to frontend in real-time
 6. PATCH triggers hot-reload (robots stop and restart with new config); DELETE cancels/purges
 
@@ -65,7 +65,7 @@ Frontend (`frontend/src/`): Vue 3 app with Pinia store (`stores/observability.js
 ## Robot Development
 
 ### Adding a Python Robot
-Create `pm_sports_bots/robots/my_bot/` with `__init__.py` and `robot.py`. `TaskComposer` auto-discovers all `*_bot/` directories — no manual registration needed.
+Create `swarmbot/robots/my_bot/` with `__init__.py` and `robot.py`. `TaskComposer` auto-discovers all `*_bot/` directories — no manual registration needed.
 
 ```python
 class MyBot(BaseRobot):
@@ -118,7 +118,7 @@ When creating a task, specify robots via top-level `robots`:
 
 - **Async-first**: no blocking I/O in async paths; use `asyncio.to_thread()` when unavoidable
 - **Type hints**: modern style (`str | None`, `list[str]`, `dict[str, Any]`)
-- **Imports**: three groups (stdlib / third-party / local), absolute from `pm_sports_bots`
+- **Imports**: three groups (stdlib / third-party / local), absolute from `swarmbot`
 - **Naming**: `snake_case` functions/vars, `PascalCase` classes, `UPPER_SNAKE_CASE` constants
 - **Logging**: `loguru.logger` with context (`task_id`, `robot_type`, `stream`, `stage`)
 - **Comments**: some files use Chinese — match existing language in each file

@@ -1,12 +1,12 @@
 # AGENTS.md
-Operational guidance for coding agents working in `pm-sports-bots`.
+Operational guidance for coding agents working in `swarmbot`.
 
 ## 1) Repository Snapshot
 - Language/runtime: Python `3.12` + `uv`
 - Core stack: FastAPI, Redis (async), Loguru
-- Main package: `pm_sports_bots/`
-- API app entry: `pm_sports_bots.api.main:app`
-- Worker entry: `python -m pm_sports_bots.worker.main`
+- Main package: `swarmbot/`
+- API app entry: `swarmbot.api.main:app`
+- Worker entry: `python -m swarmbot.worker.main`
 - Architecture split: `api/`, `worker/`, `robots/`, `shared/`
 
 ## 2) Cursor/Copilot Rule Files
@@ -26,20 +26,20 @@ Operational guidance for coding agents working in `pm-sports-bots`.
 - Start local Redis when needed: `docker run --rm -p 6379:6379 redis:7`
 
 ## 4) Local Run Commands
-- Start worker: `uv run python -m pm_sports_bots.worker.main`
-- Start API with reload: `uv run uvicorn pm_sports_bots.api.main:app --host 0.0.0.0 --port 8000 --reload`
+- Start worker: `uv run python -m swarmbot.worker.main`
+- Start API with reload: `uv run uvicorn swarmbot.api.main:app --host 0.0.0.0 --port 8000 --reload`
 - Publish demo task: `uv run python scripts/publish_demo_task.py`
 
 ## 5) Build, Lint, and Test Commands
 The project currently does not pin lint/test tooling in `pyproject.toml`; use these defaults.
 
 ### Build / Sanity
-- Syntax compile check (minimum): `uv run python -m compileall pm_sports_bots scripts`
+- Syntax compile check (minimum): `uv run python -m compileall swarmbot scripts`
 
 ### Lint / Format (when Ruff is available)
-- Lint: `uv run ruff check pm_sports_bots scripts`
-- Auto-fix lint issues: `uv run ruff check --fix pm_sports_bots scripts`
-- Format: `uv run ruff format pm_sports_bots scripts`
+- Lint: `uv run ruff check swarmbot scripts`
+- Auto-fix lint issues: `uv run ruff check --fix swarmbot scripts`
+- Format: `uv run ruff format swarmbot scripts`
 
 ### Tests (pytest)
 - Run full suite: `uv run pytest`
@@ -58,7 +58,7 @@ Note: there is no `tests/` directory in the current scaffold. Keep the single-te
 
 ### Imports
 - Use three import groups with one blank line: stdlib, third-party, local.
-- Prefer absolute imports from `pm_sports_bots...`.
+- Prefer absolute imports from `swarmbot...`.
 - Keep imports at module top unless a local import prevents cycles/heavy startup cost.
 - Avoid wildcard imports.
 
@@ -139,7 +139,7 @@ Note: there is no `tests/` directory in the current scaffold. Keep the single-te
 - Update `README.md` and `AGENTS.md` when behavior or workflow changes
 
 ## 9) Verification Workflow for Agents
-- For small edits: run at least `uv run python -m compileall pm_sports_bots scripts`.
+- For small edits: run at least `uv run python -m compileall swarmbot scripts`.
 - For behavior changes: run focused pytest commands first, then broader suite when available.
 - Prefer single-test execution while iterating, then run `uv run pytest -x` before handoff.
 - If no tests exist for touched code, state that explicitly and include manual verification steps.

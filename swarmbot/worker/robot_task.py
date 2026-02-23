@@ -10,8 +10,8 @@ from typing import Any, Optional
 
 from loguru import logger
 
-from pm_sports_bots.robots import TaskComposer
-from pm_sports_bots.shared import Channels, RedisClient, TaskConfig, TaskState, TaskStatus
+from swarmbot.robots import TaskComposer
+from swarmbot.shared import Channels, RedisClient, TaskConfig, TaskState, TaskStatus
 
 
 class RobotTask:

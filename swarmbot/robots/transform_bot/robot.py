@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from loguru import logger
 
-from pm_sports_bots.robots.base import BaseRobot, Signal
-from pm_sports_bots.shared.channels import SignalType, StreamName
+from swarmbot.robots.base import BaseRobot, Signal
+from swarmbot.shared.channels import SignalType, StreamName
 
 
 class TransformBot(BaseRobot):

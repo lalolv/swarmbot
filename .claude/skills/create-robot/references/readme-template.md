@@ -60,7 +60,7 @@ Rust（tokio async）
 
 ## 构建
 ```bash
-cd pm_sports_bots/robots/{name}_bot
+cd swarmbot/robots/{name}_bot
 cargo build --release
 ```
 

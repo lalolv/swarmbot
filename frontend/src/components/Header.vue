@@ -18,7 +18,7 @@ import ThemeSwitcher from "@/components/ThemeSwitcher.vue";
           </svg>
         </div>
         <div class="min-w-0">
-          <h1 class="font-display text-base sm:text-lg leading-tight font-bold text-foreground truncate">PM Sports Bots</h1>
+          <h1 class="font-display text-base sm:text-lg leading-tight font-bold text-foreground truncate">SwarmBot</h1>
           <p class="hidden sm:block text-[10px] text-muted-foreground tracking-wider uppercase truncate">Task Orchestration System</p>
         </div>
       </div>

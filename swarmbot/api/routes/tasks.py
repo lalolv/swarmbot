@@ -7,9 +7,9 @@ from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request
 
-from pm_sports_bots.api.schemas.tasks import CreateTaskRequest, RobotSpec, UpdateTaskRequest
-from pm_sports_bots.robots import TaskComposer
-from pm_sports_bots.shared import (
+from swarmbot.api.schemas.tasks import CreateTaskRequest, RobotSpec, UpdateTaskRequest
+from swarmbot.robots import TaskComposer
+from swarmbot.shared import (
     Channels,
     RedisClient,
     TaskCommand,

@@ -28,8 +28,8 @@ from __future__ import annotations
 
 import os
 
-from pm_sports_bots.robots.rust_proxy import RustRobotProxy
-from pm_sports_bots.shared.channels import StreamName
+from swarmbot.robots.rust_proxy import RustRobotProxy
+from swarmbot.shared.channels import StreamName
 
 _BIN = os.path.join(os.path.dirname(__file__), "target/release/{name}-bot")
 
@@ -110,7 +110,7 @@ use tokio::signal;
 use tokio::sync::watch;
 use tracing::{info, warn, error};
 
-const STREAM_PREFIX: &str = "pm_sports_bots";
+const STREAM_PREFIX: &str = "swarmbot";
 
 fn stream_key(task_id: &str, stream_name: &str) -> String {
     format!("{STREAM_PREFIX}:task:{task_id}:stream:{stream_name}")
@@ -295,7 +295,7 @@ async fn main() -> Result<()> {
 
 | 规则 | 说明 |
 |------|------|
-| Stream key 格式 | `pm_sports_bots:task:{task_id}:stream:{name}` |
+| Stream key 格式 | `swarmbot:task:{task_id}:stream:{name}` |
 | Signal 字段 | `type`, `source`, `task_id`, `timestamp`, `schema_version`, `data`(JSON) |
 | 启动 | 向 control 流写 `robot_start` 信号 |
 | 停止 | 收到 SIGTERM 后优雅关闭，写 `robot_stop` 信号 |
@@ -306,7 +306,7 @@ async fn main() -> Result<()> {
 ## 编译
 
 ```bash
-cd pm_sports_bots/robots/{name}_bot
+cd swarmbot/robots/{name}_bot
 cargo build --release
 # 产物：target/release/{name}-bot
 ```

@@ -26,7 +26,7 @@ Rust（tokio async）
 
 ## 构建
 ```bash
-cd pm_sports_bots/robots/trading_bot
+cd swarmbot/robots/trading_bot
 cargo build --release
 ```
 

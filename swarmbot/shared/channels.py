@@ -34,7 +34,7 @@ class Channels:
     """Redis Channel 命名工具类"""
 
     # 🔧 自定义点: 修改前缀为你的项目名
-    PREFIX = "pm_sports_bots"
+    PREFIX = "swarmbot"
 
     # 控制 Channel（Worker 监听）
     CONTROL = f"{PREFIX}:control"

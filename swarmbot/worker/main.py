@@ -7,8 +7,8 @@ from pathlib import Path
 
 from loguru import logger
 
-from pm_sports_bots.shared import RedisClient
-from pm_sports_bots.worker.task_manager import TaskManager
+from swarmbot.shared import RedisClient
+from swarmbot.worker.task_manager import TaskManager
 
 
 async def main() -> None:
