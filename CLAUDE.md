@@ -15,7 +15,7 @@ Redis Streams + Worker + SSE backend scaffold for managing autonomous robot syst
 uv sync                                              # Install Python deps
 cp .env.example .env                                 # First-time env setup
 docker run --rm -p 6379:6379 redis:7                 # Start local Redis
-uv run python -m swarmbot.worker.main          # Start worker
+uv run python -m swarmbot.worker.main                # Start worker
 uv run uvicorn swarmbot.api.main:app --host 0.0.0.0 --port 8000 --reload  # Start API
 uv run python scripts/publish_demo_task.py           # Submit demo task
 ```
@@ -30,9 +30,9 @@ cd frontend && npm install && npm run dev            # Dev server on :5173 (prox
 uv run python -m compileall swarmbot scripts   # Minimum syntax check
 uv run ruff check --fix swarmbot scripts       # Lint + auto-fix
 uv run ruff format swarmbot scripts            # Format
-uv run pytest                                        # Full test suite
-uv run pytest tests/test_file.py::test_name -q       # Single test
-uv run pytest -x                                     # Stop on first failure
+uv run pytest                                  # Full test suite
+uv run pytest tests/test_file.py::test_name -q # Single test
+uv run pytest -x                               # Stop on first failure
 ```
 
 No `tests/` directory exists yet. Always run `compileall` as minimum verification.
@@ -43,24 +43,62 @@ Four backend layers under `swarmbot/`:
 
 - **`shared/`** — Redis client wrapper, channel/key naming (`Channels`, `StreamName`, `SignalType`), domain models (`TaskConfig`, `TaskStatus`, `TaskState`), Pydantic schemas
 - **`robots/`** — `BaseRobot` ABC; `RustRobotProxy` for Rust subprocess robots; `TaskComposer` auto-discovers and instantiates robots
-- **`worker/`** — `TaskManager` listens to control channel, manages task lifecycle; `RobotTask` composes robots, monitors config, handles hot-reload; `ExecutionDedupe` prevents duplicate task startup
-- **`api/`** — FastAPI routes under `/api/v1/`. Task CRUD publishes to control channel. SSE bridge at `/api/v1/live/subscribe/{task_id}` converts Redis Streams → Server-Sent Events
+- **`worker/`** — `TaskManager` listens to command stream via consumer group, manages task lifecycle; `RobotTask` composes robots, monitors config, handles hot-reload; `ExecutionDedupe` prevents duplicate task startup
+- **`api/`** — FastAPI routes under `/api/v1/`. Task CRUD publishes to command stream. SSE bridge at `/api/v1/live/subscribe/{task_id}` converts Redis Streams → Server-Sent Events
 
-Frontend (`frontend/src/`): Vue 3 app with Pinia store (`stores/observability.js`) managing SSE subscription, robot state, and stream counters.
+Frontend (`frontend/src/`): Vue 3 app with Pinia store (`stores/observability.ts`) managing dual-layer SSE subscriptions, robot state, and stream counters.
 
 ### Task Lifecycle
-1. API creates task → publishes to Redis control channel
-2. Worker's `TaskManager` picks it up → `RobotTask.run()` starts
+1. API creates task → publishes `create` command to `swarmbot:stream:commands`
+2. Worker's `TaskManager` consumes via consumer group → `RobotTask.run()` starts
 3. `TaskComposer.compose()` instantiates robots per `TaskConfig.robots` (`robots` is required, no implicit defaults)
 4. Robots emit signals to task-scoped streams (`swarmbot:task:TASK_ID:stream:NAME`)
 5. SSE bridge streams events to frontend in real-time
 6. PATCH triggers hot-reload (robots stop and restart with new config); DELETE cancels/purges
+7. Each command produces a receipt on `swarmbot:stream:command_receipts` and a task projection on `swarmbot:stream:task_projections`
+
+On worker startup, `TaskManager._recover_tasks()` scans Redis for tasks in `PENDING`/`RUNNING` state and resumes them.
+
+### Redis Key / Stream Layout
+```
+swarmbot:stream:commands             # Global — task commands (TaskManager consumes via group)
+swarmbot:stream:command_receipts     # Global — command accepted/applied/rejected receipts
+swarmbot:stream:task_projections     # Global — task state change events (frontend subscribes)
+swarmbot:task:{task_id}:status       # JSON TaskStatus for each task
+swarmbot:task:{task_id}:config       # JSON TaskConfig for each task
+swarmbot:task:{task_id}:stream:data  # Per-task data stream
+swarmbot:task:{task_id}:stream:output
+swarmbot:task:{task_id}:stream:control
+```
 
 ### Key Contracts
 - **Stream names** are defined in `StreamName` enum (`channels.py`); `Channels.ALL_STREAMS` is auto-generated from it — add streams there, not as bare strings
-- **Signal payloads** are JSON with `ensure_ascii=False`; keep schema stable across producer/consumer
+- **Signal payloads** are JSON with `ensure_ascii=False`; keep `schema_version = "1.0"` stable across producer/consumer
+- **Signal fields**: `type`, `source`, `task_id`, `timestamp`, `data`, `schema_version` — do not add required fields without versioning
 - **API response envelopes** use consistent fields (`accepted`, `task_id`, `message`)
 - **Robot status** is event-driven: `BaseRobot` calls `status_callback` on every `emit()` and `signals_in` increment; a 30s heartbeat in `RobotTask` provides liveness confirmation
+- **Command pattern**: every command → receipt (`accepted`/`applied`/`rejected`) → projection (state change); frontend uses optimistic updates via `taskVersions` to avoid stale overwrites
+
+### API Endpoints
+```
+GET    /api/v1/tasks                   # List all tasks
+POST   /api/v1/tasks                   # Create task (publishes command)
+GET    /api/v1/tasks/{task_id}         # Get task status
+PATCH  /api/v1/tasks/{task_id}         # Update config (triggers hot-reload)
+DELETE /api/v1/tasks/{task_id}         # Cancel and purge task
+POST   /api/v1/tasks/{task_id}/sleep   # Sleep task (pause robots, keep data)
+POST   /api/v1/tasks/{task_id}/wake    # Wake sleeping task
+GET    /api/v1/live/subscribe/{task_id}  # SSE stream for task events
+GET    /api/v1/live/tasks              # SSE stream for global task projections
+GET    /api/v1/robots                  # List available robot types
+```
+
+### Frontend SSE Architecture
+The Pinia store (`stores/observability.ts`) maintains two concurrent SSE connections:
+- **Global tasks feed** (`/api/v1/live/tasks`): receives task projections for all tasks; always active
+- **Per-task monitor** (`/api/v1/live/subscribe/{task_id}`): receives robot signals and status for the selected task
+
+Static terminal states (`sleeping`, `completed`, `failed`, `cancelled`) skip SSE — frontend polls or uses projection events only. Version numbers (`taskVersions`) prevent out-of-order events from overwriting newer state.
 
 ## Robot Development
 
