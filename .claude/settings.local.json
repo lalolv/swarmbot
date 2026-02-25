@@ -20,7 +20,8 @@
       "Bash(python3:*)",
       "Bash(SKILL_DIR=\"/Volumes/UWorks/Projects/Aixtrade/swarmbot/.claude/skills/create-vue-frontend\":*)",
       "Bash(find:*)",
-      "Bash(cargo add:*)"
+      "Bash(cargo add:*)",
+      "Bash(which gh || brew list gh 2>&1)"
     ]
   }
 }
